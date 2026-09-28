@@ -118,6 +118,8 @@ class Weights(BaseModel):
     japan: float
     facts: float
     freshness: float
+    # 狙うキーワード（トレーラーハウス）で上位を取りに行ける題材か。種別から Python で決める
+    seo: float = 0.0
 
     @model_validator(mode="after")
     def _sum_to_one(self) -> Weights:
@@ -186,6 +188,56 @@ class WordPressConfig(BaseModel):
         return self.user, self.app_password
 
 
+class SeoConfig(BaseModel):
+    """検索（SEO）と AI の回答（AIO）向けの設定。
+
+    主キーワードは種別で決める: トレーラー系 → トレーラーハウス / 小屋・キャビン → 小屋 /
+    それ以外 → タイニーハウス。タイトル・リード1文目・見出し・説明文・alt に入れる。
+    **物件に当てはまらないキーワードは入れない**（トレーラーでないものに「トレーラーハウス」と
+    書くのは検索エンジンのスパムの方針に触れ、読者も裏切る）。
+    """
+
+    # すべての記事に付けるタグ（2026-09-29 ユーザー指定）
+    required_tags: list[str] = ["タイニーハウス", "小屋"]
+    # トレーラー系の物件には追加で付ける
+    trailer_tags: list[str] = ["トレーラーハウス"]
+    trailer_kinds: list[str] = ["tiny_house_on_wheels", "trailer_caravan"]
+    cabin_kinds: list[str] = ["cabin_hut", "treehouse"]
+    # WP のタグ ID（2026-09-29 に REST API で確認）。検索で取り違えないよう固定する
+    tag_ids: dict[str, int] = {"タイニーハウス": 274, "小屋": 162, "トレーラーハウス": 323}
+    # 説明文（WP の抜粋 → meta description）の文字数
+    description_min: int = 80
+    description_max: int = 120
+    # 事実だけのデータ欄と、よくある質問（AI の回答に拾われやすい形）
+    data_box: bool = True
+    faq: bool = True
+    # 記事の最後に置く内部リンク（タグ・カテゴリの一覧）
+    internal_links: dict[str, str] = {
+        "トレーラーハウス": "https://yadokari.net/tag/%e3%83%88%e3%83%ac%e3%83%bc%e3%83%a9%e3%83%bc%e3%83%8f%e3%82%a6%e3%82%b9/",
+        "タイニーハウス": "https://yadokari.net/tag/%e3%82%bf%e3%82%a4%e3%83%8b%e3%83%bc%e3%83%8f%e3%82%a6%e3%82%b9/",
+        "小屋": "https://yadokari.net/tag/%e5%b0%8f%e5%b1%8b/",
+    }
+    # WP に物件の事実を post meta（yc_facts）で送る。**プラグイン（wordpress-plugin/）を
+    # 入れてから true にする**（構造化データの材料になる）
+    send_facts_meta: bool = False
+
+    def keyword_for(self, kind: str) -> str:
+        if kind in self.trailer_kinds:
+            return "トレーラーハウス"
+        if kind in self.cabin_kinds:
+            return "小屋"
+        return "タイニーハウス"
+
+    def tags_for(self, kind: str, suggested: list[str]) -> list[str]:
+        tags = list(self.required_tags)
+        if kind in self.trailer_kinds:
+            tags += self.trailer_tags
+        for t in suggested:
+            if t not in tags:
+                tags.append(t)
+        return tags
+
+
 class LearningConfig(BaseModel):
     # 非承認理由のタグ。審査画面の選択肢にもなる
     tags: list[str] = [
@@ -210,6 +262,7 @@ class Config(BaseModel):
     drafting: DraftingConfig = DraftingConfig()
     wordpress: WordPressConfig = WordPressConfig()
     learning: LearningConfig = LearningConfig()
+    seo: SeoConfig = SeoConfig()
 
     @property
     def anthropic_api_key(self) -> str:

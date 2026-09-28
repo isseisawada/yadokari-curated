@@ -32,6 +32,23 @@ SMALLNESS = {
 }
 
 
+# 「トレーラーハウス」で上位を狙えるか（2026-09-29 ユーザー指定の狙い）。
+# トレーラー系を最優先、次に小屋・タイニーハウスの主キーワードで書けるもの
+SEO = {
+    "tiny_house_on_wheels": 100,
+    "trailer_caravan": 100,
+    "van_camper": 50,
+    "cabin_hut": 60,
+    "treehouse": 50,
+    "container": 50,
+    "prefab_modular": 50,
+    "boat_floating": 40,
+    "small_house": 40,
+    "other_building": 10,
+    "not_a_building": 0,
+}
+
+
 @dataclass
 class Axis:
     name: str
@@ -106,6 +123,7 @@ def build_axes(
         Axis("japan", float(a.japan_score), weights.japan, a.japan_reason),
         Axis("facts", facts, weights.facts, facts_note),
         Axis("freshness", fresh, weights.freshness, fresh_note),
+        Axis("seo", float(SEO.get(a.kind, 0)), weights.seo, a.kind),
     ]
 
 

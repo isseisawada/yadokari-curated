@@ -36,7 +36,8 @@ def test_push_creates_a_wp_draft_with_category_tags_and_featured_image(config, d
     post = wp.posts[r.post_id]
     assert post["status"] == "draft"
     assert post["categories"] == [2184]
-    assert post["tags"] == [274, 167]
+    # 必須タグ（タイニーハウス・小屋・トレーラーハウス）は固定の ID、それ以外は検索で完全一致
+    assert post["tags"] == [274, 162, 323, 167]
     assert post["featured_media"] == wp.media[0]["id"]
     assert post["slug"].startswith("yc-")
     d = get_draft(db, draft_id)

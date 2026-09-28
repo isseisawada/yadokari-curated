@@ -45,6 +45,7 @@ python -m yadokari.cli serve
 - `docs/existing-articles.md` — 既存記事121本の分析（型・画像の扱い・更新ペース）
 - `docs/source-survey.md` — ソース候補の実測
 - `docs/scoring.md` — 採点の軸と重み（案）
+- `docs/seo.md` — SEO / AIO（トレーラーハウスで上位を狙う）
 - `docs/operations.md` — 運用の流れ・最初の本番の手順・秘匿値・毎日の確認
 
 frmg-jp/ig-post（FREMING CURATED）の net・db・採点クライアントを元にしている。

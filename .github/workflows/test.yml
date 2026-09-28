@@ -16,3 +16,5 @@ jobs:
       # ruff は pyproject で固定したバージョンで回す（手元の古い ruff で通っても CI で落ちる）
       - run: ruff check src tests scripts
       - run: pytest -q
+      - name: WP プラグインの文法チェック
+        run: php -l wordpress-plugin/yadokari-curated-seo.php

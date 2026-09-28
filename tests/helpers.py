@@ -58,6 +58,8 @@ def draft_json(**over) -> dict:
             {"heading": "**内と外が溶け合う**", "paragraphs": ["- 大きな窓が景色を引き込む。"]},
         ],
         "closing": ["限られた空間を丁寧に使う日本の暮らしとも重なる。"],
+        "description": "オーストラリアのビルダーBlack Clayが手がけたトレーラーハウス「Harper」。全長8メートル、約20㎡の室内に大きな窓と曲線の壁を持つ、風景にひらく小さな住まい。",
+        "faq": [{"q": "Harperの広さは？", "a": "約20㎡。"}],
     }
     data.update(over)
     return data

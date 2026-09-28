@@ -114,7 +114,8 @@ def test_total_uses_config_weights(config):
     now = datetime(2026, 9, 28, tzinfo=UTC)
     axes = build_axes(config.scoring.weights, a, 7, now.isoformat(), now)
     w = config.scoring.weights
-    expected = 80 * w.design + 70 * w.story + 100 * w.smallness + 100 * w.photos + 40 * w.japan + 90 * w.facts + 100 * w.freshness
+    expected = (80 * w.design + 70 * w.story + 100 * w.smallness + 100 * w.photos + 40 * w.japan
+                + 90 * w.facts + 100 * w.freshness + 100 * w.seo)
     assert total(axes, a) == round(expected, 1)
 
 
@@ -138,3 +139,11 @@ def test_score_pending_saves_and_survives_failures(config, db):
     assert ok["status"] == "scored" and ok["score"] > 0
     assert json.loads(ok["assessment"])["facts"]["builder"] == "Black Clay"
     assert ng["status"] == "collected" and ng["score_error"]
+
+
+def test_trailer_scores_higher_than_cabin_of_same_quality(config):
+    """「トレーラーハウス」で上位を狙う（2026-09-29）。同じ出来ならトレーラー系が上に来る。"""
+    trailer = Assessment.from_json(_payload(kind="trailer_caravan"))
+    cabin = Assessment.from_json(_payload(kind="cabin_hut"))
+    w = config.scoring.weights
+    assert total(build_axes(w, trailer, 7, None), trailer) > total(build_axes(w, cabin, 7, None), cabin)

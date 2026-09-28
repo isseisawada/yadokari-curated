@@ -91,16 +91,25 @@ class WordPressClient:
         )
 
     # --- タグ ---------------------------------------------------------
-    def tag_ids(self, names: list[str]) -> list[int]:
+    def tag_ids(self, names: list[str], fixed: dict[str, int] | None = None) -> list[int]:
         """タグ名 → ID。既存のタグに完全一致するものだけ使い、**新しいタグは作らない**
-        （タグの体系は編集部のもの。勝手に増やさない）。"""
+        （タグの体系は編集部のもの。勝手に増やさない）。
+
+        必須タグ（タイニーハウス・小屋・トレーラーハウス）は ID を固定表から引く。
+        検索は部分一致で「#タイニーハウス #トレーラーハウス…」のような似たタグが大量に返り、
+        取り違えや取りこぼしが起きうるため。"""
         ids: list[int] = []
         for name in names:
+            if fixed and name in fixed:
+                if fixed[name] not in ids:
+                    ids.append(fixed[name])
+                continue
             data = self._check(self._http.get(f"{self.api}/tags", params={"search": name,
-                                                                         "per_page": 20}))
+                                                                         "per_page": 100}))
             for t in data:
                 if t.get("name") == name:
-                    ids.append(int(t["id"]))
+                    if int(t["id"]) not in ids:
+                        ids.append(int(t["id"]))
                     break
             else:
                 log.info("WP に無いタグなので付けません: %s", name)

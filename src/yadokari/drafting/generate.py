@@ -13,7 +13,7 @@ from yadokari.config import Config
 from yadokari.db.connection import DbConnection, Row
 from yadokari.db.repository import get_article, save_draft
 from yadokari.drafting.numbers import unsupported_numbers
-from yadokari.drafting.prompt import SCHEMA, SYSTEM, build_source, build_user
+from yadokari.drafting.prompt import SCHEMA, build_source, build_user, system_prompt
 from yadokari.drafting.render import (
     DraftParts,
     body_chars,
@@ -21,6 +21,7 @@ from yadokari.drafting.render import (
     build_title,
     excerpt_of,
 )
+from yadokari.drafting.seo import checks, failed
 from yadokari.llm import call_json, make_client
 from yadokari.logging_setup import get_logger
 
@@ -38,9 +39,29 @@ class Draft:
     chars: int
 
 
+def keyword_for(config: Config, assessment: dict | None) -> str:
+    return config.seo.keyword_for((assessment or {}).get("kind", ""))
+
+
+def checked_facts(facts: dict[str, str], check_source: str) -> tuple[dict[str, str], list[str]]:
+    """データ欄に出す事実。**元記事に無い数字を含む値は出さない**（抽出の段階の誤りを本文に持ち込まない）。"""
+    ok: dict[str, str] = {}
+    dropped: list[str] = []
+    for key, value in facts.items():
+        if not value:
+            continue
+        if unsupported_numbers(value, check_source):
+            dropped.append(f"データ欄から外した（元記事に無い数字）: {key}={value}")
+            continue
+        ok[key] = value
+    return ok, dropped
+
+
 def generate(config: Config, row: Row, client=None) -> Draft:
     d = config.drafting
+    seo = config.seo
     assessment = json.loads(row["assessment"]) if row["assessment"] else None
+    keyword = keyword_for(config, assessment)
     text = row["content_text"] or ""
     source = build_source(row["title"], row["source_url"], text, assessment)
     # 検算の元資料は**元記事だけ**。LLM が抽出した事実は元資料に入れない
@@ -48,12 +69,13 @@ def generate(config: Config, row: Row, client=None) -> Draft:
     check_source = f"{row['title'] or ''}\n{text}"
 
     client = client or make_client(config.anthropic_api_key)
-    messages: list[dict] = [{"role": "user", "content": build_user(source, d.target_chars)}]
+    system = system_prompt(seo.description_min, seo.description_max)
+    messages: list[dict] = [{"role": "user", "content": build_user(source, d.target_chars, keyword)}]
     parts: DraftParts | None = None
     stray: set[str] = set()
     for attempt in range(2):
         data, _ = call_json(
-            client, model=d.model, system=SYSTEM, messages=messages, schema=SCHEMA,
+            client, model=d.model, system=system, messages=messages, schema=SCHEMA,
             max_tokens=d.max_tokens, effort=d.effort, fallbacks=d.fallbacks,
         )
         parts = DraftParts.from_json(data)
@@ -73,16 +95,28 @@ def generate(config: Config, row: Row, client=None) -> Draft:
             })
     assert parts is not None
 
+    facts, dropped = checked_facts((assessment or {}).get("facts") or {}, check_source)
     images = json.loads(row["image_urls"] or "[]")[: d.max_images]
     featured = row["og_image"] or (images[0] if images else None)
-    tags = (assessment or {}).get("suggested_tags") or []
+    tags = seo.tags_for((assessment or {}).get("kind", ""),
+                        (assessment or {}).get("suggested_tags") or [])
+    link_keywords = [keyword] + [k for k in seo.required_tags if k != keyword]
+    title = build_title(d.title_prefix, parts)
+    excerpt = excerpt_of(parts)
+    body = build_body(
+        parts, images, row["source_url"], facts=facts, internal_links=seo.internal_links,
+        link_keywords=link_keywords, data_box=seo.data_box, faq=seo.faq,
+    )
+    warnings = [f"元資料に無い数字: {n}" for n in sorted(stray)] + dropped
+    warnings += failed(checks(seo, title=title, excerpt=excerpt, body_html=body, tags=tags,
+                              keyword=keyword))
     return Draft(
-        title=build_title(d.title_prefix, parts),
-        excerpt=excerpt_of(parts),
-        body_html=build_body(parts, images, row["source_url"]),
+        title=title,
+        excerpt=excerpt,
+        body_html=body,
         tags=tags,
         featured_image=featured,
-        warnings=[f"元資料に無い数字: {n}" for n in sorted(stray)],
+        warnings=warnings,
         chars=body_chars(parts),
     )
 

@@ -97,7 +97,7 @@ class PushResult:
 
 
 def _payload(config: Config, draft: Row, article_id: int, wp: WordPressClient,
-             status: str, media_id: int | None) -> dict:
+             status: str, media_id: int | None, facts: dict | None = None) -> dict:
     tags = json.loads(draft["tags"] or "[]")
     payload: dict = {
         "title": draft["title"],
@@ -108,7 +108,10 @@ def _payload(config: Config, draft: Row, article_id: int, wp: WordPressClient,
         "categories": config.wordpress.category_ids,
     }
     if tags:
-        payload["tags"] = wp.tag_ids(tags)
+        payload["tags"] = wp.tag_ids(tags, fixed=config.seo.tag_ids)
+    if config.seo.send_facts_meta and facts:
+        # 構造化データの材料（wordpress-plugin/ が register_post_meta した yc_facts）
+        payload["meta"] = {"yc_facts": json.dumps(facts, ensure_ascii=False)}
     if media_id:
         payload["featured_media"] = media_id
     if status == "future":
@@ -188,7 +191,11 @@ def push(config: Config, conn: DbConnection, draft_id: int, *, schedule: bool = 
         if media_id is None:
             media_id = _upload_featured(config, wp, draft, article["source_url"],
                                         fetch or default_fetch(config))
-        payload = _payload(config, draft, draft["article_id"], wp, status, media_id)
+        assessment = json.loads(article["assessment"]) if article["assessment"] else {}
+        facts = {k: v for k, v in (assessment.get("facts") or {}).items() if v}
+        if assessment.get("kind"):
+            facts["kind"] = assessment["kind"]
+        payload = _payload(config, draft, draft["article_id"], wp, status, media_id, facts)
         if post_id is None:
             post = wp.create_post(payload)
             created = True

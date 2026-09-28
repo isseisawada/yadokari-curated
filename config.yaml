@@ -72,11 +72,12 @@ scoring:
   review_threshold: 50
   # 軸の案（docs/scoring.md）。承認実績が溜まったら見直す。合計 1.0
   weights:
-    design: 0.25       # デザイン性（LLM）
-    story: 0.25        # 暮らし方の物語（LLM）
-    smallness: 0.15    # 小さい／動く度合い（LLM の種別判定から Python で点にする）
-    photos: 0.15       # 写真の枚数（記事から数える）
+    design: 0.22       # デザイン性（LLM）
+    story: 0.22        # 暮らし方の物語（LLM）
+    smallness: 0.13    # 小さい／動く度合い（LLM の種別判定から Python で点にする）
+    photos: 0.13       # 写真の枚数（記事から数える）
     japan: 0.10        # 日本の読者との接点（LLM）
+    seo: 0.10          # 「トレーラーハウス」で上位を狙える題材か（種別から。2026-09-29 追加）
     facts: 0.05        # 設計者・国・面積・価格が揃っているか（抽出結果から数える）
     freshness: 0.05    # 元記事の新しさ（公開日から）
 
@@ -96,3 +97,14 @@ wordpress:
   slug_prefix: "yc-"
   # アイキャッチは元写真を WP に取り込む（既存記事と同じ。2026-09-28 ユーザー判断）
   upload_featured_image: true
+
+# SEO / AIO（2026-09-29）。詳しくは docs/seo.md
+seo:
+  required_tags: ["タイニーハウス", "小屋"]    # すべての記事に付ける
+  trailer_tags: ["トレーラーハウス"]           # トレーラー系には追加で付ける
+  tag_ids: {"タイニーハウス": 274, "小屋": 162, "トレーラーハウス": 323}
+  description_min: 80
+  description_max: 120
+  data_box: true
+  faq: true
+  send_facts_meta: false        # wordpress-plugin/ を入れてから true

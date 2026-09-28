@@ -38,6 +38,18 @@ SYSTEM = """あなたは YADOKARI.net の編集者です。連載「タイニー
   計算（合計・差・割合）をしない。** 資料が「400 sq ft」なら「400平方フィート」と書く
 - 価格は資料にあれば書いてよい（既存記事の半数近くが価格に触れている）
 
+# 検索（SEO）と AI の回答（AIO）
+依頼文で「主キーワード」を指定する。次を守る:
+- subject（タイトルに入る）に主キーワードをそのまま含める
+- lead の1文目は「〈物件名〉は、〈国・地域〉の〈ビルダー／建築家〉が手がけた〈主キーワード〉だ。」の
+  ように、**何か・誰が・どこで**を1文で言い切る定義の文にする（AI や検索の要約に引用されやすい）
+- sections の見出しのうち少なくとも1つに主キーワードを自然に含める
+- 同じ語を不自然に繰り返さない。本文全体で主キーワードは3〜6回程度
+- description: 検索結果に出る説明文。{desc_min}〜{desc_max}字。物件名と主キーワードを含め、
+  何が魅力かを事実で言う。「〜をご紹介」のような定型句で埋めない
+- faq: 読者が検索しそうな質問を2〜3個（例:「〈物件名〉の広さは？」「どこのビルダー？」「価格は？」）。
+  **答えが資料にある質問だけ**。答えは1〜2文で、資料の事実だけ。資料に無ければ faq を減らす
+
 # 記号
 - マークダウン（**、#、- の箇条書き）や HTML を使わない。プレーンな文章だけ
 - 見出しに「」や記号を付けない
@@ -49,8 +61,18 @@ _PARAS = {"type": "array", "items": _STR}
 SCHEMA: dict = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["catch", "subject", "name", "lead", "sections", "closing"],
+    "required": ["catch", "subject", "name", "lead", "sections", "closing", "description", "faq"],
     "properties": {
+        "description": _STR,
+        "faq": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["q", "a"],
+                "properties": {"q": _STR, "a": _STR},
+            },
+        },
         "catch": _STR,
         "subject": _STR,
         "name": _STR,
@@ -80,7 +102,12 @@ def build_source(title: str | None, url: str, text: str, assessment: dict | None
     return "\n\n".join(parts)
 
 
-def build_user(source: str, target_chars: int) -> str:
+def system_prompt(desc_min: int, desc_max: int) -> str:
+    return SYSTEM.replace("{desc_min}", str(desc_min)).replace("{desc_max}", str(desc_max))
+
+
+def build_user(source: str, target_chars: int, keyword: str = "タイニーハウス") -> str:
     return (
+        f"主キーワード: {keyword}\n"
         f"次の資料から、本文{target_chars}字前後の下書きを書いてください。\n\n{source}"
     )

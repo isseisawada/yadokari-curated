@@ -42,12 +42,12 @@ def test_body_matches_existing_layout():
     # 写真から始まり、via はドメイン表記で元記事へのリンク
     assert html.startswith('<div class="wp-caption alignnone"><img')
     assert 'via: <a href="https://www.blackclay.com.au/harper">blackclay.com.au</a>' in html
-    assert html.count("<h3><b>") == 2
+    assert html.count("<h3><b>") == 3  # 見出し2つ＋よくある質問（データ欄は facts が無いので出ない）
     # マークダウンが本文に漏れない
     assert "**" not in html and "<p>- " not in html
-    # 写真は全部使い、最後は出典の一覧
+    # 写真は全部使い、出典の一覧がある
     assert html.count("wp-caption-text") == 6
-    assert html.rstrip().endswith("</a></p>") and "via;<br />" in html
+    assert "via;<br />" in html
 
 
 def test_html_in_llm_output_is_escaped():
@@ -67,9 +67,10 @@ def test_generate_retries_once_when_numbers_are_unsupported(config, db):
     d = get_draft(db, draft_id)
     assert len(llm.calls) == 2
     assert "215" in llm.calls[1]["messages"][-1]["content"]
-    assert json.loads(d["warnings"]) == []
+    assert not [w for w in json.loads(d["warnings"]) if w.startswith("元資料に無い数字")]
     assert d["featured_image"] == "https://img.example.com/og.jpg"
-    assert json.loads(d["tags"]) == ["タイニーハウス", "オーストラリア"]
+    # 必須タグ＋トレーラー系は「トレーラーハウス」も（2026-09-29 ユーザー指定）
+    assert json.loads(d["tags"])[:3] == ["タイニーハウス", "小屋", "トレーラーハウス"]
     # 写真は max_images まで
     assert d["body_html"].count("wp-caption-text") == config.drafting.max_images
 
@@ -79,7 +80,7 @@ def test_generate_keeps_warning_when_retry_still_fails(config, db):
     bad = draft_json(closing=["約215平方フィート。"])
     llm = FakeLLM(bad, bad)
     d = get_draft(db, generate_for(config, db, article_id, client=llm))
-    assert json.loads(d["warnings"]) == ["元資料に無い数字: 215"]
+    assert "元資料に無い数字: 215" in json.loads(d["warnings"])
 
 
 def test_generate_uses_fallbacks_and_structured_output(config, db):

@@ -60,6 +60,7 @@ def test_approve_draft_edit_and_push_flow(env):
     assert draft_path.startswith("/drafts/")
     page = c.get(draft_path).text
     assert "【海外事例】" in page and "wp-caption" in page
+    assert "SEO / AIO" in page and "主キーワード「トレーラーハウス」" in page
     # 予約ボタンは無効（allow_schedule: false）
     assert "disabled" in page
 

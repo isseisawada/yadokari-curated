@@ -45,6 +45,7 @@ AXIS_LABELS = {
     "japan": "日本との接点",
     "facts": "事実の揃い",
     "freshness": "新しさ",
+    "seo": "トレーラーハウスSEO",
 }
 FACT_LABELS = {
     "name": "物件名", "builder": "ビルダー", "architect": "設計", "country": "国",
@@ -202,8 +203,16 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
                     suggestion = suggest_slot(config, conn).isoformat()
                 except RuntimeError:
                     suggestion = None
+        from yadokari.drafting.generate import keyword_for
+        from yadokari.drafting.seo import checks
+
+        assessment = json.loads(a["assessment"]) if a["assessment"] else None
+        keyword = keyword_for(config, assessment)
+        seo_results = checks(config.seo, title=d["title"], excerpt=d["excerpt"] or "",
+                             body_html=d["body_html"], tags=json.loads(d["tags"] or "[]"),
+                             keyword=keyword)
         return render(
-            request, "draft.html", d=d, a=a,
+            request, "draft.html", d=d, a=a, keyword=keyword, seo=seo_results,
             warnings=json.loads(d["warnings"] or "[]"), tags=", ".join(json.loads(d["tags"] or "[]")),
             scheduled_local=local(d["scheduled_at"] or suggestion, "%Y-%m-%dT%H:%M"),
             suggested=suggestion is not None,

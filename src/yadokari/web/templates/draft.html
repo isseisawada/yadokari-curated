@@ -12,13 +12,16 @@
 <div>
 <form method="post" action="/drafts/{{ d['id'] }}">
   <label>タイトル</label><input type="text" name="title" value="{{ d['title'] }}">
-  <label>抜粋</label><textarea name="excerpt" style="min-height:70px">{{ d['excerpt'] or '' }}</textarea>
+  <label>説明文（WP の抜粋 → 検索結果の説明文。{{ (d['excerpt'] or '')|length }}字）</label><textarea name="excerpt" style="min-height:70px">{{ d['excerpt'] or '' }}</textarea>
   <label>本文（HTML）</label><textarea name="body_html" style="min-height:520px;font-family:ui-monospace,monospace;font-size:12px">{{ d['body_html'] }}</textarea>
   <label>タグ（カンマ区切り。WP に既にあるタグだけ付きます）</label><input type="text" name="tags" value="{{ tags }}">
   <label>アイキャッチ画像 URL（WP のメディアに取り込みます）</label><input type="text" name="featured_image" value="{{ d['featured_image'] or '' }}">
   <label>公開日時（JST{{ '・空き枠の提案' if suggested }}）</label><input type="datetime-local" name="scheduled_at" value="{{ scheduled_local }}">
   <p style="margin-top:20px"><button class="primary">保存</button></p>
 </form>
+<h3 class="sec">SEO / AIO <span class="muted">主キーワード「{{ keyword }}」・保存すると測り直します</span></h3>
+<table>{% for c in seo %}<tr><td style="width:28px">{% if c.ok %}<b style="color:var(--blue)">✓</b>{% else %}<b class="warn">✕</b>{% endif %}</td><td>{{ c.label }}</td><td class="muted">{{ c.detail }}</td></tr>{% endfor %}</table>
+<p class="muted">合格は上位表示の保証ではありません。記事の側でできることが抜けていないかを見ています。</p>
 <h3 class="sec">SEND</h3>
 <div class="box">
   <p class="muted" style="margin-top:0">保存してから送ってください。送るたびに WP 上の同じ投稿を更新します（2本目は作りません）。</p>
