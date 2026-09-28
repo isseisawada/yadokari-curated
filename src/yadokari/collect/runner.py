@@ -147,7 +147,7 @@ def collect_source(
         log.info("%s: 手動投入のみのソースなので自動収集しません", source.name)
         return stats
     limit = limit or config.collect.per_source_limit
-    cutoff = datetime.now(UTC) - timedelta(days=config.collect.lookback_days)
+    cutoff = datetime.now(UTC) - timedelta(days=source.lookback_days or config.collect.lookback_days)
 
     items: list[Item] = []
     seen: set[str] = set()

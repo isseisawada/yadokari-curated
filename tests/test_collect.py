@@ -136,3 +136,10 @@ def test_unreadable_feed_is_logged_not_raised(config, db):
     src = Source(name="t", feed="https://t.com/feed")
     stats = collect_source(config, FakeClient({}, fail={"https://t.com/feed"}), db, src)
     assert stats.inserted == 0
+
+
+def test_source_lookback_overrides_default(config, db):
+    src = Source(name="t", feed="https://t.com/feed", lookback_days=365)
+    old = NOW - timedelta(days=config.collect.lookback_days + 60)
+    pages = {"https://t.com/feed": _rss([("Old", "https://t.com/old", old)]), "https://t.com/old": _article()}
+    assert collect_source(config, FakeClient(pages), db, src).inserted == 1

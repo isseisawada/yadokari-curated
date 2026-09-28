@@ -88,6 +88,9 @@ class Source(BaseModel):
     # 利用規約で自動収集を禁じているサイト。**自動では一切取りに行かない。**
     # 人が審査画面の「手動で追加」から URL と本文・写真URLを入れる（ページも取得しない）
     manual_only: bool = False
+    # ソースごとに遡る日数（未指定なら collect.lookback_days）。
+    # ArchDaily の cabins 一覧は少し前の作品も並ぶ。既存記事も数年前の作品を紹介している
+    lookback_days: int | None = None
     note: str | None = None
 
     @model_validator(mode="after")

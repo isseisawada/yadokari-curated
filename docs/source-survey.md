@@ -115,3 +115,15 @@ ArchDaily の一覧を実測し、足りなければソースを足す。
 **量への影響:** 自動で回るのは Tiny House Talk・New Atlas・designboom・Leibal・Dezeen・
 Tiny House Blog。見立ては**週8〜12本**（推測）。1日1本（週7本）は、候補のほとんどを
 承認しないと届かない。手動投入と、規約で許されるソースの追加が要る。
+
+### 2026-09-29 追記: ユーザー判断で全サイトを自動収集
+
+ユーザー判断により、**規約で自動収集を禁じている ArchDaily・Dwell・Gessato も自動収集する**
+（`manual_only` を外した。config.yaml の note に判断と日付を残してある）。
+規約違反を理由とするアクセス遮断や申し入れのリスクは残る。
+
+変えないこと: robots.txt の尊重（fail-closed）・同一ドメイン3秒間隔・並列なし・
+User-Agent に連絡先・ブロックやレート制限の回避をしない。
+
+- ArchDaily は一覧に少し前の作品が並ぶので `lookback_days: 365`（30日だと24件中15件が落ちた）
+- Tiny House Blog は robots.txt 自体が 429 を返す日があり、その日は取らない（fail-closed のまま）
