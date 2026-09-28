@@ -1,0 +1,110 @@
+# YADOKARI CURATED の設定。秘匿値（DATABASE_URL・ANTHROPIC_API_KEY）はここに書かない。
+
+app:
+  db_path: data/yadokari.db
+  log_dir: logs
+  timezone: Asia/Tokyo
+
+http:
+  user_agent: "YADOKARI-curated/0.1 (+mailto:sawada@yadokari.net)"
+  request_interval_sec: 3.0      # 下限3秒。これ未満は起動時に弾く
+  max_concurrency_per_domain: 1  # 同一ドメインへの並列は禁止
+  timeout_sec: 30
+  max_retries: 3
+  respect_robots_txt: true       # 無効にはできない
+
+collect:
+  lookback_days: 30
+  per_source_limit: 20
+  min_text_chars: 400
+
+# ソース。実測は docs/source-survey.md（2026-09-28）。
+# 採用はユーザー判断（2026-09-28）: 本命6つ + Dezeen（フィードのみ）+ Tiny House Blog・Gessato
+# 利用規約の確認（2026-09-28・docs/source-survey.md）。
+# **ArchDaily・Dwell・Gessato は規約で自動収集を禁じているが、ユーザー判断で自動収集する
+# （2026-09-29）。** robots.txt・3秒間隔・UA の連絡先・回避をしない、は変えない。
+sources:
+  - name: archdaily
+    # 利用規約: "use an automatic device (such as a robot or spider) or manual process to copy
+    # or scrape the Website ... without the express written permission of ArchDaily" を禁止
+    # サイト全体のフィードは窓が1.4日しかない。cabins-and-lodges の一覧を入口にする
+    index_urls: ["https://www.archdaily.com/category/cabins-and-lodges"]
+    url_include: '^https://www\.archdaily\.com/\d{6,}/[a-z0-9-]+$'
+    lookback_days: 365           # 一覧に少し前の作品も並ぶ（30日だと24件中15件が落ちた）
+    note: "規約で自動収集禁止。ユーザー判断で収集（2026-09-29）"
+  - name: dwell
+    # 利用規約（Ziff Davis）: "use any robot, spider ... to crawl, scrape ... harvest, gather,
+    # extract, retrieve or index any portion of the Services" を禁止
+    feed: "https://www.dwell.com/@dwell/rss"
+    prefilter: true              # 住宅全般のフィードなので絞る
+    note: "規約で自動収集禁止。ユーザー判断で収集（2026-09-29）"
+  - name: tinyhousetalk
+    feed: "https://tinyhousetalk.com/feed/"
+  - name: newatlas
+    feed: "https://newatlas.com/tiny-houses/index.rss"
+  - name: designboom
+    feed: "https://www.designboom.com/tag/cabin/feed/"
+  - name: leibal
+    feed: "https://leibal.com/feed/"
+    prefilter: true              # 家具・プロダクトも混ざる
+  - name: dezeen
+    feed: "https://www.dezeen.com/tag/cabins/feed/"
+    fetch_article: false         # 記事ページはデータセンターから 403。フィードが全文
+  - name: dezeen-micro
+    feed: "https://www.dezeen.com/tag/micro-homes/feed/"
+    fetch_article: false
+  - name: tinyhouseblog
+    feed: "https://tinyhouseblog.com/feed/"
+  - name: gessato
+    # 利用規約: "prohibited from using any data mining, robots, or other data gathering
+    # systems and extraction tools" を禁止
+    feed: "https://www.gessato.com/feed/"
+    prefilter: true
+    note: "規約で自動収集禁止。ユーザー判断で収集（2026-09-29）"
+  - name: manual
+    # 上のどれにも当たらない媒体・ビルダーの自社サイトを人が入れるとき
+    manual_only: true
+
+scoring:
+  model: claude-opus-5-5
+  effort: low
+  max_tokens: 16000
+  review_threshold: 50
+  # 軸の案（docs/scoring.md）。承認実績が溜まったら見直す。合計 1.0
+  weights:
+    design: 0.22       # デザイン性（LLM）
+    story: 0.22        # 暮らし方の物語（LLM）
+    smallness: 0.13    # 小さい／動く度合い（LLM の種別判定から Python で点にする）
+    photos: 0.13       # 写真の枚数（記事から数える）
+    japan: 0.10        # 日本の読者との接点（LLM）
+    seo: 0.10          # 「トレーラーハウス」で上位を狙える題材か（種別から。2026-09-29 追加）
+    facts: 0.05        # 設計者・国・面積・価格が揃っているか（抽出結果から数える）
+    freshness: 0.05    # 元記事の新しさ（公開日から）
+
+drafting:
+  model: claude-opus-5-5
+  effort: medium
+  max_images: 8
+  target_chars: 1600
+  title_prefix: "【海外事例】"
+
+wordpress:
+  base_url: "https://yadokari.net"
+  category_ids: [2184]          # タイニーハウス、最前線
+  # 予約投稿を許すか。最初は下書き（status=draft）だけ。WP 上で見て OK が出たら true
+  allow_schedule: false
+  post_times: ["19:00"]         # 既存記事の大半が 19:00。数を増やすと1日の本数が増える
+  slug_prefix: "yc-"
+  # アイキャッチは元写真を WP に取り込む（既存記事と同じ。2026-09-28 ユーザー判断）
+  upload_featured_image: true
+
+# SEO / AIO（2026-09-29）。詳しくは docs/seo.md
+seo:
+  required_tags: ["タイニーハウス", "小屋"]    # すべての記事に付ける
+  trailer_tags: ["トレーラーハウス"]           # トレーラー系には追加で付ける
+  tag_ids: {"タイニーハウス": 274, "小屋": 162, "トレーラーハウス": 323}
+  description_min: 80
+  description_max: 120
+  data_box: true
+  faq: true
+  send_facts_meta: false        # wordpress-plugin/ を入れてから true

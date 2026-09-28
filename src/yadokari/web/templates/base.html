@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}CURATED | YADOKARI{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  /* YADOKARI.net（テーマ yadokari2025）の実測値に合わせる（2026-09-29）
+     地 #FFF / 文字 #000 / 罫 #D8D8D8 / 補足 #9B9B9B / 帯 #F8F8F8
+     青 #003AF2（カテゴリラベル）/ 赤 #EB4E42 / 書体 Inter + Noto Sans JP */
+  :root { --ink:#000; --sub:#9B9B9B; --line:#D8D8D8; --band:#F8F8F8; --blue:#003AF2; --red:#EB4E42; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#fff; color:var(--ink); font:16px/1.8 "Inter","Noto Sans JP",sans-serif; }
+  a { color:inherit; }
+  .gh { display:flex; align-items:center; gap:36px; height:84px; padding:0 20px; border-bottom:1px solid var(--line); background:#fff; position:sticky; top:0; z-index:10; }
+  .logo { font-weight:900; font-size:26px; letter-spacing:-.02em; text-decoration:none; line-height:1; }
+  .logo small { font-size:13px; font-weight:800; margin-left:2px; }
+  .gh nav { display:flex; gap:32px; }
+  .gh nav a { text-decoration:none; font-weight:800; font-size:18px; letter-spacing:.01em; padding:6px 0; border-bottom:3px solid transparent; }
+  .gh nav a.on { border-color:var(--ink); }
+  .gh .right { margin-left:auto; }
+  .sub { background:var(--band); border-bottom:1px solid var(--line); padding:18px 20px; display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+  .sub h1 { font-size:22px; font-weight:800; margin:0; letter-spacing:.01em; }
+  .sub .tabs { margin-left:auto; display:flex; gap:28px; flex-wrap:wrap; }
+  .sub .tabs a { text-decoration:none; font-weight:700; font-size:14px; }
+  .sub .tabs a.on { border-bottom:2px solid var(--ink); }
+  main { max-width:1280px; margin:0 auto; padding:32px 20px 100px; }
+  .flash, .error { padding:12px 16px; margin:0 0 24px; font-weight:500; font-size:14px; }
+  .flash { background:var(--band); border-left:4px solid var(--blue); }
+  .error { background:#FFF3F2; border-left:4px solid var(--red); }
+  .label { display:inline-block; background:var(--blue); color:#fff; font-weight:700; font-size:14px; padding:2px 12px; border-radius:2px; line-height:1.7; }
+  .label.gray { background:var(--ink); }
+  .label.red { background:var(--red); }
+  .muted { color:var(--sub); font-size:13px; }
+  .date { font-family:"Inter",sans-serif; font-size:13px; font-weight:500; }
+  /* カード（カテゴリ一覧と同じ3列） */
+  .cards { display:grid; grid-template-columns:repeat(3,1fr); gap:48px 48px; }
+  .card { text-decoration:none; display:block; }
+  .card .ph { position:relative; aspect-ratio:3/2; background:var(--band); overflow:hidden; }
+  .card .ph img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .3s; }
+  .card:hover .ph img { transform:scale(1.03); }
+  .card .score { position:absolute; left:0; top:0; background:#000; color:#fff; font-weight:800; font-size:20px; padding:4px 12px; font-family:"Inter",sans-serif; }
+  .card .score.low { background:var(--sub); }
+  .card .meta { margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .card h3 { font-size:15px; font-weight:700; line-height:1.7; margin:8px 0 6px; }
+  .card p { font-size:13px; color:#333; margin:0; line-height:1.7; }
+  .tag { font-size:13px; margin-right:12px; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  td, th { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-weight:700; white-space:nowrap; }
+  h2 { font-size:30px; font-weight:900; line-height:1.5; margin:12px 0; }
+  h3.sec { font-size:18px; font-weight:800; margin:36px 0 12px; padding-bottom:8px; border-bottom:2px solid var(--ink); }
+  .gallery { display:flex; gap:8px; overflow-x:auto; padding:4px 0 12px; }
+  .gallery img { height:180px; }
+  .btn, button { font:700 15px "Inter","Noto Sans JP",sans-serif; padding:10px 28px; border:1px solid var(--ink); background:#fff; color:var(--ink); border-radius:50px; cursor:pointer; text-decoration:none; display:inline-block; }
+  button:hover { background:var(--band); }
+  button.approve { background:var(--blue); border-color:var(--blue); color:#fff; }
+  button.reject { background:var(--red); border-color:var(--red); color:#fff; }
+  button.primary { background:var(--ink); color:#fff; }
+  button[disabled] { opacity:.35; cursor:not-allowed; }
+  label { display:block; font-weight:700; font-size:14px; margin:18px 0 6px; }
+  textarea, input[type=text], input[type=datetime-local], select { width:100%; font:15px "Inter","Noto Sans JP",sans-serif; padding:10px 12px; border:1px solid var(--line); border-radius:2px; background:#fff; }
+  textarea { min-height:120px; line-height:1.7; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:56px; }
+  .box { background:var(--band); padding:24px; }
+  .preview { border-top:1px solid var(--ink); padding-top:8px; }
+  .preview img { max-width:100%; display:block; }
+  .preview h3 { font-size:20px; font-weight:900; margin:40px 0 12px; }
+  .preview p { margin:0 0 16px; }
+  .preview .wp-caption { margin:24px 0; }
+  .preview .wp-caption-text { font-size:12px; color:var(--sub); margin:4px 0 0; }
+  .warn { color:var(--red); font-weight:700; }
+  .axis { display:grid; grid-template-columns:120px 1fr 44px; gap:10px; align-items:center; font-size:14px; padding:6px 0; }
+  .bar { height:6px; background:var(--line); }
+  .bar i { display:block; height:100%; background:var(--ink); }
+  .note { grid-column:2 / 4; color:#555; font-size:12px; margin-top:-4px; }
+  @media (max-width:1000px) { .cards { grid-template-columns:repeat(2,1fr); gap:32px 24px; } .grid2 { grid-template-columns:1fr; } }
+  @media (max-width:640px) { .cards { grid-template-columns:1fr; } .gh { gap:16px; height:64px; } .gh nav { gap:14px; } .gh nav a { font-size:14px; } .logo { font-size:20px; } h2 { font-size:22px; } }
+</style>
+</head>
+<body>
+<header class="gh">
+  <a class="logo" href="/">YADOKARI<small>.net</small></a>
+  <nav>
+    <a href="/articles" class="{{ 'on' if request.url.path.startswith('/articles') or request.url.path == '/' }}">CURATE</a>
+    <a href="/drafts" class="{{ 'on' if request.url.path.startswith('/drafts') }}">DRAFTS</a>
+    <a href="/manual" class="{{ 'on' if request.url.path.startswith('/manual') }}">ADD</a>
+    <a href="/rules" class="{{ 'on' if request.url.path.startswith('/rules') }}">RULES</a>
+  </nav>
+  <span class="right muted">タイニーハウス、最前線</span>
+</header>
+{% block sub %}{% endblock %}
+<main>
+  {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

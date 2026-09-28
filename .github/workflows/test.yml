@@ -1,0 +1,20 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      # ruff は pyproject で固定したバージョンで回す（手元の古い ruff で通っても CI で落ちる）
+      - run: ruff check src tests scripts
+      - run: pytest -q
+      - name: WP プラグインの文法チェック
+        run: php -l wordpress-plugin/yadokari-curated-seo.php

@@ -1,0 +1,29 @@
+# 審査画面（Render）。New → Blueprint でこのリポジトリを選ぶと読まれる。
+#
+# 常駐ワーカーは置かない。公開は WordPress の予約投稿に任せるので、時刻に合わせて
+# 起きている必要がない。画面を開いたときだけ DB に触る（Neon の無料枠を食い潰さない）。
+# だから Free でよい（15分でスリープし、最初の1回は30秒ほど待つ）。
+services:
+  - type: web
+    name: yadokari-curated-review
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: pip install -e ".[postgres]"
+    startCommand: uvicorn yadokari.web.asgi:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DATABASE_URL
+        sync: false
+      - key: REVIEW_UI_USER
+        sync: false
+      - key: REVIEW_UI_PASSWORD
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: WP_USER
+        sync: false
+      - key: WP_APP_PASSWORD
+        sync: false

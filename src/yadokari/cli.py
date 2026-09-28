@@ -1,0 +1,288 @@
+"""コマンド。
+
+    python -m yadokari.cli db migrate
+    python -m yadokari.cli collect [--source archdaily] [--limit 5] [--dry-run]
+    python -m yadokari.cli score [--limit 40]
+    python -m yadokari.cli list [--status scored] [--min-score 50]
+    python -m yadokari.cli stats
+    python -m yadokari.cli serve [--host 127.0.0.1] [--port 8000]
+    python -m yadokari.cli draft ARTICLE_ID
+    python -m yadokari.cli wp push DRAFT_ID [--schedule]
+    python -m yadokari.cli wp sync
+    python -m yadokari.cli learn
+    python -m yadokari.cli monitor
+    python -m yadokari.cli report
+    python -m yadokari.cli validate import validation/positives.tsv --label pos [--limit N]
+    python -m yadokari.cli validate score
+    python -m yadokari.cli validate report
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+
+from yadokari.config import load_config
+from yadokari.db.connection import connect
+from yadokari.db.migrate import ensure_migrated, migrate
+from yadokari.db.repository import counts_by_source, list_articles
+from yadokari.logging_setup import setup_logging
+
+
+def _cmd_db(cfg, args) -> int:
+    migrate(cfg.app.target())
+    print("OK")
+    return 0
+
+
+def _cmd_collect(cfg, args) -> int:
+    from yadokari.collect.runner import collect_all
+
+    conn = None
+    if not args.dry_run:
+        ensure_migrated(cfg.app.target())
+        conn = connect(cfg.app.target())
+    try:
+        results = collect_all(cfg, conn, names=args.source, limit=args.limit, dry_run=args.dry_run)
+    finally:
+        if conn is not None:
+            conn.close()
+    for s in results:
+        print(s.summary())
+        if args.dry_run:
+            for u in s.inserted_urls:
+                print("   ", u)
+    return 0
+
+
+def _cmd_score(cfg, args) -> int:
+    from yadokari.scoring.runner import score_pending
+
+    ensure_migrated(cfg.app.target())
+    conn = connect(cfg.app.target())
+    try:
+        stats = score_pending(cfg, conn, limit=args.limit)
+    finally:
+        conn.close()
+    print(stats.summary())
+    return 0 if stats.failed == 0 else 1
+
+
+def _cmd_list(cfg, args) -> int:
+    conn = connect(cfg.app.target())
+    try:
+        rows = list_articles(conn, status=args.status, min_score=args.min_score, limit=args.limit)
+    finally:
+        conn.close()
+    for r in rows:
+        score = f"{r['score']:5.1f}" if r["score"] is not None else "  -  "
+        kind = ""
+        if r["assessment"]:
+            a = json.loads(r["assessment"])
+            kind = f"{a.get('kind', '')} {a.get('facts', {}).get('country', '')}"
+        print(f"{score} [{r['status']:9}] {r['source']:14} {r['image_count']:>2}枚 {kind:28} {r['title'] or ''}"[:200])
+        print(f"      {r['source_url']}")
+    return 0
+
+
+def _cmd_stats(cfg, args) -> int:
+    conn = connect(cfg.app.target())
+    try:
+        for r in counts_by_source(conn):
+            print(f"{r['source']:16} {r['status']:10} {r['n']}")
+    finally:
+        conn.close()
+    return 0
+
+
+def _cmd_serve(cfg, args) -> int:
+    import uvicorn
+
+    from yadokari.web.app import create_app
+    from yadokari.web.auth import require_credentials
+
+    auth = require_credentials(args.host)
+    ensure_migrated(cfg.app.target())
+    uvicorn.run(create_app(cfg, auth=auth), host=args.host, port=args.port)
+    return 0
+
+
+def _cmd_draft(cfg, args) -> int:
+    from yadokari.drafting.generate import generate_for
+
+    ensure_migrated(cfg.app.target())
+    conn = connect(cfg.app.target())
+    try:
+        draft_id = generate_for(cfg, conn, args.article_id)
+        row = conn.execute("SELECT title, warnings FROM drafts WHERE id = ?", (draft_id,)).fetchone()
+    finally:
+        conn.close()
+    print(f"下書き {draft_id}: {row['title']}")
+    for w in json.loads(row["warnings"] or "[]"):
+        print("  要確認:", w)
+    return 0
+
+
+def _cmd_wp(cfg, args) -> int:
+    from yadokari.wordpress.publish import push, sync
+
+    ensure_migrated(cfg.app.target())
+    conn = connect(cfg.app.target())
+    try:
+        if args.action == "push":
+            if args.draft_id is None:
+                print("DRAFT_ID を指定してください")
+                return 2
+            r = push(cfg, conn, args.draft_id, schedule=args.schedule)
+            print(f"post {r.post_id} status={r.status} {r.link or ''}")
+            for n in r.notes:
+                print("  ", n)
+            return 0
+        res = sync(cfg, conn)
+    finally:
+        conn.close()
+    print(f"確認 {res.checked} 件 / 公開 {len(res.published)} 件")
+    for draft_id, link in res.published:
+        print(f"  公開: draft {draft_id} {link or ''}")
+    for draft_id, when in res.missed:
+        print(f"  要確認: draft {draft_id} は予定 {when} を過ぎても公開されていません（予約投稿の失敗）")
+    return 1 if res.missed else 0
+
+
+def _cmd_learn(cfg, args) -> int:
+    from yadokari.learning.loop import run_learning
+
+    ensure_migrated(cfg.app.target())
+    conn = connect(cfg.app.target())
+    try:
+        stats = run_learning(cfg, conn)
+    finally:
+        conn.close()
+    print(stats.summary())
+    for line in stats.new_candidates:
+        print("  提案:", line)
+    return 0
+
+
+def _cmd_monitor(cfg, args) -> int:
+    from yadokari.monitor import check
+
+    conn = None
+    try:
+        conn = connect(cfg.app.target())
+    except Exception as exc:  # noqa: BLE001 - DB が落ちていても WP 側は確かめる
+        print(f"要確認: DB に繋がりません: {exc}")
+    try:
+        report = check(cfg, conn)
+    finally:
+        if conn is not None:
+            conn.close()
+    print("\n".join(report.lines))
+    print("判定:", "OK" if report.ok else "要確認")
+    return 0 if report.ok else 1
+
+
+def _cmd_report(cfg, args) -> int:
+    from yadokari.report import weekly
+
+    conn = connect(cfg.app.target())
+    try:
+        print(weekly(conn, days=args.days))
+    finally:
+        conn.close()
+    return 0
+
+
+def _cmd_validate(cfg, args) -> int:
+    from yadokari import validation
+
+    ensure_migrated(cfg.app.target())
+    conn = connect(cfg.app.target())
+    try:
+        if args.action == "import":
+            if not args.file:
+                print("取り込むファイルを指定してください")
+                return 2
+            st = validation.import_list(cfg, conn, args.file, args.label, limit=args.limit)
+            print(f"取り込み {st.added} 件 / 既にある {st.existing} 件 / 取得失敗 {len(st.failed)} 件")
+            for f in st.failed:
+                print("  失敗:", f)
+        elif args.action == "score":
+            ok, ng = validation.score_all(cfg, conn, limit=args.limit or 200)
+            print(f"採点 {ok} 件（失敗 {ng}）")
+        else:
+            print(validation.report(cfg, conn))
+    finally:
+        conn.close()
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="yadokari")
+    parser.add_argument("--config", default="config.yaml")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("db", help="DB の操作")
+    p.add_argument("action", choices=["migrate"])
+    p.set_defaults(func=_cmd_db)
+
+    p = sub.add_parser("collect", help="ソースから記事を集める")
+    p.add_argument("--source", action="append", help="ソース名（複数可）。省略時は全部")
+    p.add_argument("--limit", type=int, default=None, help="1ソースあたりの上限")
+    p.add_argument("--dry-run", action="store_true", help="DB に書かずに何が入るかだけ見る")
+    p.set_defaults(func=_cmd_collect)
+
+    p = sub.add_parser("score", help="未採点の記事を採点する")
+    p.add_argument("--limit", type=int, default=40)
+    p.set_defaults(func=_cmd_score)
+
+    p = sub.add_parser("list", help="記事の一覧")
+    p.add_argument("--status")
+    p.add_argument("--min-score", type=float)
+    p.add_argument("--limit", type=int, default=50)
+    p.set_defaults(func=_cmd_list)
+
+    p = sub.add_parser("stats", help="ソース別・状態別の件数")
+    p.set_defaults(func=_cmd_stats)
+
+    p = sub.add_parser("serve", help="審査画面を起動する")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.set_defaults(func=_cmd_serve)
+
+    p = sub.add_parser("draft", help="承認済みの記事から下書きを作る")
+    p.add_argument("article_id", type=int)
+    p.set_defaults(func=_cmd_draft)
+
+    p = sub.add_parser("wp", help="WordPress への送信と状態の確認")
+    p.add_argument("action", choices=["push", "sync"])
+    p.add_argument("draft_id", type=int, nargs="?")
+    p.add_argument("--schedule", action="store_true", help="予約投稿にする（allow_schedule が要る）")
+    p.set_defaults(func=_cmd_wp)
+
+    p = sub.add_parser("learn", help="非承認理由からルール候補を育てる")
+    p.set_defaults(func=_cmd_learn)
+
+    p = sub.add_parser("monitor", help="昨日・今日の分が出たかを確かめる")
+    p.set_defaults(func=_cmd_monitor)
+
+    p = sub.add_parser("report", help="週次レポート")
+    p.add_argument("--days", type=int, default=7)
+    p.set_defaults(func=_cmd_report)
+
+    p = sub.add_parser("validate", help="採点の検証（載せたい／載せたくない見本）")
+    p.add_argument("action", choices=["import", "score", "report"])
+    p.add_argument("file", nargs="?")
+    p.add_argument("--label", choices=["pos", "neg"], default="pos")
+    p.add_argument("--limit", type=int)
+    p.set_defaults(func=_cmd_validate)
+
+    args = parser.parse_args(argv)
+    cfg = load_config(args.config)
+    setup_logging(cfg.app.log_dir, cfg.app.log_level)
+    return args.func(cfg, args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
