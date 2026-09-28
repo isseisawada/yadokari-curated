@@ -1,0 +1,56 @@
+name: trial
+
+# 手で押して「収集 → 採点 → 検証」を1回回す。Neon の DB が無くても動く（この実行の中だけの SQLite）。
+# 結果はこの実行のログと、成果物（yadokari.db・結果のテキスト）で見る。
+#
+# 必要なもの: リポジトリの Secrets に ANTHROPIC_API_KEY
+# 押し方: GitHub → Actions → trial → Run workflow
+on:
+  workflow_dispatch:
+    inputs:
+      per_source:
+        description: "1ソースあたりの収集件数"
+        default: "5"
+      validation:
+        description: "検証（公開実績の見本）を何本採点するか"
+        default: "20"
+
+jobs:
+  trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: キーの確認
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::Secrets に ANTHROPIC_API_KEY がありません"
+            exit 1
+          fi
+      - run: python -m yadokari.cli db migrate
+      - name: 収集
+        run: python -m yadokari.cli collect --limit ${{ inputs.per_source }} | tee -a result.txt
+      - name: 採点
+        run: python -m yadokari.cli score --limit 100 | tee -a result.txt
+      - name: 採点結果（点の高い順）
+        run: python -m yadokari.cli list --status scored --limit 100 | tee -a result.txt
+      - name: 検証（YADOKARI が実際に記事にした元記事を採点）
+        run: |
+          python -m yadokari.cli validate import validation/positives.tsv --label pos --limit ${{ inputs.validation }} | tee -a result.txt
+          python -m yadokari.cli validate import validation/negatives.tsv --label neg | tee -a result.txt
+          python -m yadokari.cli validate score | tee -a result.txt
+          python -m yadokari.cli validate report | tee -a result.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trial-result
+          path: |
+            result.txt
+            data/yadokari.db
+            logs/
