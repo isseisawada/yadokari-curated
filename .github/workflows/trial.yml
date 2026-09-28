@@ -4,8 +4,12 @@ name: trial
 # 結果はこの実行のログと、成果物（yadokari.db・結果のテキスト）で見る。
 #
 # 必要なもの: リポジトリの Secrets に ANTHROPIC_API_KEY
-# 押し方: GitHub → Actions → trial → Run workflow
+# 動かし方: validation/trial-trigger.txt を書き換えて作業ブランチに push する
+#   （手で押すボタン workflow_dispatch は main に入るまで出ない。main にマージしないで動かすため）
 on:
+  push:
+    branches: [claude/yadokari-curated-pipeline]
+    paths: [validation/trial-trigger.txt]
   workflow_dispatch:
     inputs:
       per_source:
@@ -35,14 +39,14 @@ jobs:
           fi
       - run: python -m yadokari.cli db migrate
       - name: 収集
-        run: python -m yadokari.cli collect --limit ${{ inputs.per_source }} | tee -a result.txt
+        run: python -m yadokari.cli collect --limit ${{ inputs.per_source || 5 }} | tee -a result.txt
       - name: 採点
         run: python -m yadokari.cli score --limit 100 | tee -a result.txt
       - name: 採点結果（点の高い順）
         run: python -m yadokari.cli list --status scored --limit 100 | tee -a result.txt
       - name: 検証（YADOKARI が実際に記事にした元記事を採点）
         run: |
-          python -m yadokari.cli validate import validation/positives.tsv --label pos --limit ${{ inputs.validation }} | tee -a result.txt
+          python -m yadokari.cli validate import validation/positives.tsv --label pos --limit ${{ inputs.validation || 20 }} | tee -a result.txt
           python -m yadokari.cli validate import validation/negatives.tsv --label neg | tee -a result.txt
           python -m yadokari.cli validate score | tee -a result.txt
           python -m yadokari.cli validate report | tee -a result.txt
