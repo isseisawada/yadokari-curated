@@ -1,16 +1,24 @@
 {% extends "base.html" %}
-{% block body %}
-<div class="tabs">
-  <a href="/drafts">すべて</a><a href="/drafts?state=editing">編集中</a><a href="/drafts?state=wp_draft">WP 下書き</a>
-  <a href="/drafts?state=scheduled">予約済み</a><a href="/drafts?state=published">公開済み</a>
-  <form method="post" action="/sync" style="display:inline"><button>WordPress の状態を確認</button></form>
+{% block sub %}
+<div class="sub">
+  <h1>DRAFTS</h1>
+  <div class="tabs">
+    <a href="/drafts" class="{{ 'on' if not state }}">すべて</a>
+    <a href="/drafts?state=editing" class="{{ 'on' if state == 'editing' }}">編集中</a>
+    <a href="/drafts?state=wp_draft" class="{{ 'on' if state == 'wp_draft' }}">WP 下書き</a>
+    <a href="/drafts?state=scheduled" class="{{ 'on' if state == 'scheduled' }}">予約済み</a>
+    <a href="/drafts?state=published" class="{{ 'on' if state == 'published' }}">公開済み</a>
+  </div>
+  <form method="post" action="/sync"><button>WordPress の状態を確認</button></form>
 </div>
+{% endblock %}
+{% block body %}
 <table>
 <tr><th>公開予定</th><th>タイトル</th><th>状態</th><th>WP</th></tr>
 {% for d in rows %}
 <tr>
-  <td>{{ d['scheduled_at']|local or '−' }}</td>
-  <td><a href="/drafts/{{ d['id'] }}">{{ d['title'] }}</a><div class="muted">{{ d['source'] }}{% if d['error'] %} ・ <span class="warn">{{ d['error'] }}</span>{% endif %}</div></td>
+  <td class="date">{{ d['scheduled_at']|local('%Y.%m.%d %H:%M') or '−' }}</td>
+  <td><a href="/drafts/{{ d['id'] }}"><b>{{ d['title'] }}</b></a><div class="muted">{{ d['source'] }}{% if d['error'] %} ・ <span class="warn">{{ d['error'] }}</span>{% endif %}</div></td>
   <td>{{ d['state'] }}</td>
   <td>{% if d['wp_link'] %}<a href="{{ d['wp_link'] }}" target="_blank" rel="noopener">{{ d['wp_post_id'] }}</a>{% else %}{{ d['wp_post_id'] or '' }}{% endif %}</td>
 </tr>

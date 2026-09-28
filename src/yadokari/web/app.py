@@ -72,7 +72,10 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
     def local(iso: str | None, fmt: str = "%Y-%m-%d %H:%M") -> str:
         if not iso:
             return ""
-        dt = datetime.fromisoformat(iso)
+        try:
+            dt = datetime.fromisoformat(iso)
+        except ValueError:
+            return iso[:16]
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=UTC)
         return dt.astimezone(tz).strftime(fmt)

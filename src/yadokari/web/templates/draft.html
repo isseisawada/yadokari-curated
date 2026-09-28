@@ -1,32 +1,46 @@
 {% extends "base.html" %}
+{% block sub %}
+<div class="sub">
+  <h1>DRAFT</h1>
+  <span class="muted">元記事: <a href="/articles/{{ a['id'] }}">{{ a['title'] }}</a> ・ 状態: {{ d['state'] }}{% if d['wp_post_id'] %} ・ WP post {{ d['wp_post_id'] }}（{{ d['wp_status'] }}）{% endif %}</span>
+</div>
+{% endblock %}
 {% block body %}
-<p class="muted"><a href="/drafts">← 下書き一覧</a> ・ 元記事: <a href="/articles/{{ a['id'] }}">{{ a['title'] }}</a> ・ 状態: {{ d['state'] }}{% if d['wp_post_id'] %} ・ WP post {{ d['wp_post_id'] }} ({{ d['wp_status'] }}){% endif %}</p>
 {% if warnings %}<div class="error">{% for w in warnings %}<div>{{ w }}</div>{% endfor %}<div>元記事を見て、数字を直すか消してください。</div></div>{% endif %}
 {% if d['error'] %}<div class="error">前回の送信で失敗: {{ d['error'] }}</div>{% endif %}
 <div class="grid2">
+<div>
 <form method="post" action="/drafts/{{ d['id'] }}">
   <label>タイトル</label><input type="text" name="title" value="{{ d['title'] }}">
-  <label>抜粋</label><textarea name="excerpt" style="min-height:60px">{{ d['excerpt'] or '' }}</textarea>
-  <label>本文（HTML）</label><textarea name="body_html" style="min-height:480px;font-family:monospace;font-size:12px">{{ d['body_html'] }}</textarea>
+  <label>抜粋</label><textarea name="excerpt" style="min-height:70px">{{ d['excerpt'] or '' }}</textarea>
+  <label>本文（HTML）</label><textarea name="body_html" style="min-height:520px;font-family:ui-monospace,monospace;font-size:12px">{{ d['body_html'] }}</textarea>
   <label>タグ（カンマ区切り。WP に既にあるタグだけ付きます）</label><input type="text" name="tags" value="{{ tags }}">
-  <label>アイキャッチ画像URL（WP のメディアに取り込みます）</label><input type="text" name="featured_image" value="{{ d['featured_image'] or '' }}">
-  <label>公開日時（{{ 'JST・空き枠の提案' if suggested else 'JST' }}）</label><input type="datetime-local" name="scheduled_at" value="{{ scheduled_local }}">
-  <p><button class="primary">保存</button></p>
+  <label>アイキャッチ画像 URL（WP のメディアに取り込みます）</label><input type="text" name="featured_image" value="{{ d['featured_image'] or '' }}">
+  <label>公開日時（JST{{ '・空き枠の提案' if suggested }}）</label><input type="datetime-local" name="scheduled_at" value="{{ scheduled_local }}">
+  <p style="margin-top:20px"><button class="primary">保存</button></p>
 </form>
-<div>
-  <h3>送信</h3>
-  <p class="muted">保存してから送ってください。送るたびに WP 上の同じ投稿を更新します（2本目は作りません）。</p>
-  <form method="post" action="/drafts/{{ d['id'] }}/push" style="margin-bottom:8px">
+<h3 class="sec">SEND</h3>
+<div class="box">
+  <p class="muted" style="margin-top:0">保存してから送ってください。送るたびに WP 上の同じ投稿を更新します（2本目は作りません）。</p>
+  <form method="post" action="/drafts/{{ d['id'] }}/push" style="margin-bottom:12px">
     <input type="hidden" name="mode" value="draft"><button>WordPress に下書き保存</button>
   </form>
   <form method="post" action="/drafts/{{ d['id'] }}/push">
     <input type="hidden" name="mode" value="schedule">
-    <button class="primary" {{ '' if allow_schedule else 'disabled' }}>公開日時で予約する</button>
-    {% if not allow_schedule %}<div class="muted">予約はまだ無効です（config.yaml の wordpress.allow_schedule）。まず WP 上で下書きを確認してください。</div>{% endif %}
+    <button class="approve" {{ '' if allow_schedule else 'disabled' }}>公開日時で予約する</button>
+    {% if not allow_schedule %}<div class="muted" style="margin-top:6px">予約はまだ無効です（config.yaml の wordpress.allow_schedule）。まず WP 上で下書きを確認してください。</div>{% endif %}
   </form>
   {% if d['wp_link'] %}<p><a href="{{ d['wp_link'] }}" target="_blank" rel="noopener">WP で開く</a></p>{% endif %}
-  <h3>プレビュー</h3>
-  <div class="preview"><h2>{{ d['title'] }}</h2>{{ d['body_html']|safe }}</div>
+</div>
+</div>
+<div>
+  <div class="preview">
+    <span class="label">タイニーハウス、最前線</span>
+    <h2>{{ d['title'] }}</h2>
+    <div>{% for t in tags.split(', ') if t %}<span class="tag">#{{ t }}</span>{% endfor %}</div>
+    {% if d['scheduled_at'] %}<div class="date" style="margin:8px 0 24px">{{ d['scheduled_at']|local('%Y.%m.%d') }}</div>{% endif %}
+    {{ d['body_html']|safe }}
+  </div>
 </div>
 </div>
 {% endblock %}

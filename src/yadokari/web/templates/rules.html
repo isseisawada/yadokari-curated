@@ -1,20 +1,22 @@
 {% extends "base.html" %}
+{% block sub %}
+<div class="sub"><h1>RULES</h1><span class="muted">非承認の理由が同じタグで {{ min_hits }} 回たまるとルール候補が出ます。<b>承認したものだけ</b>が次回の採点に効きます</span></div>
+{% endblock %}
 {% block body %}
-<h2>学習ルール</h2>
-<p class="muted">非承認の理由が同じタグで {{ min_hits }} 回たまると、ルールの候補が出ます。<b>承認したものだけ</b>が次回の採点プロンプトに載ります。</p>
 <table>
 <tr><th>タグ</th><th>件数</th><th>ルール案</th><th>状態</th></tr>
 {% for r in rows %}
-<tr><td>{{ r['reason_tag'] }}</td><td>{{ r['hit_count'] }}</td>
+<tr><td><b>{{ r['reason_tag'] }}</b></td><td class="date">{{ r['hit_count'] }}</td>
 <td><form method="post" action="/rules/{{ r['id'] }}">
-  <textarea name="proposal" style="min-height:60px">{{ r['proposal'] or '' }}</textarea>
-  <button name="state" value="approved" class="ok">承認して採点に使う</button>
+  <textarea name="proposal" style="min-height:70px">{{ r['proposal'] or '' }}</textarea>
+  <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+  <button name="state" value="approved" class="approve">採点に使う</button>
   <button name="state" value="dismissed">ルールにしない</button>
-  <button name="state" value="proposed">保留に戻す</button>
+  <button name="state" value="proposed">保留に戻す</button></div>
 </form></td>
 <td>{{ r['state'] }}</td></tr>
 {% else %}<tr><td colspan="4" class="muted">まだ候補はありません。</td></tr>{% endfor %}
 </table>
-<h3>非承認理由のタグ別件数</h3>
-<table>{% for c in counts %}<tr><td>{{ c['tag'] }}</td><td>{{ c['hits'] }}</td></tr>{% else %}<tr><td class="muted">まだありません。</td></tr>{% endfor %}</table>
+<h3 class="sec">非承認理由のタグ別件数</h3>
+<table>{% for c in counts %}<tr><td>{{ c['tag'] }}</td><td class="date">{{ c['hits'] }}</td></tr>{% else %}<tr><td class="muted">まだありません。</td></tr>{% endfor %}</table>
 {% endblock %}

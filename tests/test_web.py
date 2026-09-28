@@ -40,7 +40,7 @@ def test_list_shows_scored_articles_over_threshold(env):
     add_article(conn, url="https://t.com/lo", score=10)
     html = c.get("/articles").text
     assert "Harper tiny house" in html
-    assert html.count('class="row"') == 1
+    assert html.count('class="card"') == 1
 
 
 def test_reject_needs_a_reason(env):
