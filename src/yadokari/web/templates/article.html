@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block body %}
+<p class="muted"><a href="/articles">← 一覧</a> ・ {{ a['source'] }} ・ 状態: {{ a['status'] }}</p>
+<h2>{{ a['title'] }}</h2>
+<p><a href="{{ a['source_url'] }}" target="_blank" rel="noopener">{{ a['source_url'] }}</a></p>
+<div class="gallery">{% for u in images[:12] %}<img src="{{ u }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endfor %}</div>
+<p class="muted">写真 {{ images|length }} 枚{% if a['photo_credit'] %} ・ クレジット: {{ a['photo_credit'] }}{% endif %}</p>
+
+<div class="grid2">
+<div>
+  <h3>採点 {{ '%.1f'|format(a['score']) if a['score'] is not none else '（未採点）' }}</h3>
+  {% if a['score_error'] %}<p class="warn">採点に失敗: {{ a['score_error'] }}</p>{% endif %}
+  {% if assessment %}
+    {% if not assessment['relevant'] %}<p class="warn">対象外と判定: {{ assessment['relevant_reason'] }}</p>{% endif %}
+    <table>
+    {% for key, label in axis_labels.items() %}{% if detail and key in detail %}
+      <tr><th>{{ label }}</th><td>{{ detail[key]['score']|int }}</td><td class="muted">×{{ detail[key]['weight'] }}</td><td>{{ detail[key]['note'] }}</td></tr>
+    {% endif %}{% endfor %}
+    </table>
+    <h3>要約</h3><p>{{ assessment['summary_ja'] }}</p>
+    <h3>特徴</h3><ul>{% for h in assessment['highlights'] %}<li>{{ h }}</li>{% endfor %}</ul>
+  {% endif %}
+</div>
+<div>
+  {% if assessment %}
+  <h3>抽出した事実（元記事にあるものだけ）</h3>
+  <table>{% for key, label in fact_labels.items() %}{% if assessment['facts'][key] %}<tr><th>{{ label }}</th><td>{{ assessment['facts'][key] }}</td></tr>{% endif %}{% endfor %}</table>
+  <p class="muted">タグ案: {{ assessment['suggested_tags']|join('、') }}</p>
+  {% endif %}
+
+  <h3>審査</h3>
+  {% if a['status'] in ('scored', 'collected') %}
+  <form method="post" action="/articles/{{ a['id'] }}/decide" style="margin-bottom:12px">
+    <input type="hidden" name="decision" value="approved">
+    <button class="ok">承認</button>
+  </form>
+  <form method="post" action="/articles/{{ a['id'] }}/decide">
+    <input type="hidden" name="decision" value="rejected">
+    <select name="tag"><option value="">理由のタグ（選ぶと学習に直接入る）</option>{% for t in tags %}<option>{{ t }}</option>{% endfor %}</select>
+    <textarea name="reason" placeholder="非承認の理由（自由記述）。次回の採点の学習に使います" style="min-height:70px;margin-top:6px"></textarea>
+    <button class="ng" style="margin-top:6px">非承認</button>
+  </form>
+  {% else %}
+    <p>{{ '承認済み' if a['status'] == 'approved' else '非承認' }}</p>
+    {% if a['status'] == 'approved' %}
+      {% if draft %}<p><a href="/drafts/{{ draft['id'] }}">下書きを開く</a>（{{ draft['state'] }}）</p>{% endif %}
+      <form method="post" action="/articles/{{ a['id'] }}/draft">
+        <button class="primary">{{ '下書きを作り直す' if draft else '下書きを作る' }}</button>
+        <span class="muted">1分ほどかかります</span>
+      </form>
+    {% endif %}
+    {% if not draft or not draft['wp_post_id'] %}
+    <form method="post" action="/articles/{{ a['id'] }}/reset" style="margin-top:10px"><button>審査を取り消す</button></form>
+    {% endif %}
+  {% endif %}
+  {% for f in feedback %}<p class="muted">{{ f['created_at']|local }} {{ f['decision'] }} {{ f['tag'] or '' }} {{ f['reason'] or '' }}</p>{% endfor %}
+</div>
+</div>
+{% endblock %}

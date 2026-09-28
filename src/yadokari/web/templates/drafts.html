@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="tabs">
+  <a href="/drafts">すべて</a><a href="/drafts?state=editing">編集中</a><a href="/drafts?state=wp_draft">WP 下書き</a>
+  <a href="/drafts?state=scheduled">予約済み</a><a href="/drafts?state=published">公開済み</a>
+  <form method="post" action="/sync" style="display:inline"><button>WordPress の状態を確認</button></form>
+</div>
+<table>
+<tr><th>公開予定</th><th>タイトル</th><th>状態</th><th>WP</th></tr>
+{% for d in rows %}
+<tr>
+  <td>{{ d['scheduled_at']|local or '−' }}</td>
+  <td><a href="/drafts/{{ d['id'] }}">{{ d['title'] }}</a><div class="muted">{{ d['source'] }}{% if d['error'] %} ・ <span class="warn">{{ d['error'] }}</span>{% endif %}</div></td>
+  <td>{{ d['state'] }}</td>
+  <td>{% if d['wp_link'] %}<a href="{{ d['wp_link'] }}" target="_blank" rel="noopener">{{ d['wp_post_id'] }}</a>{% else %}{{ d['wp_post_id'] or '' }}{% endif %}</td>
+</tr>
+{% else %}<tr><td colspan="4" class="muted">ありません。</td></tr>{% endfor %}
+</table>
+{% endblock %}

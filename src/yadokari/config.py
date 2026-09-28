@@ -133,12 +133,75 @@ class ScoringConfig(BaseModel):
     review_threshold: float = 50.0
 
 
+class DraftingConfig(BaseModel):
+    model: str = "claude-opus-5-5"
+    # 下書きは文章の質が効くので採点より上げる
+    effort: str | None = "medium"
+    max_tokens: int = 16000
+    fallbacks: bool = True
+    # 本文に並べる写真の上限（既存記事は中央値7枚）
+    max_images: int = 8
+    # 本文の目安の文字数（既存記事の中央値 約1,600字）
+    target_chars: int = 1600
+    title_prefix: str = "【海外事例】"
+
+
+class WordPressConfig(BaseModel):
+    """資格情報は環境変数（WP_USER / WP_APP_PASSWORD）からだけ読む。"""
+
+    base_url: str = "https://yadokari.net"
+    category_ids: list[int] = [2184]
+    # **予約投稿（status=future）を許すか。** 最初は下書きだけを作る段階から始め、
+    # WP 上で見て OK が出てから true にする
+    allow_schedule: bool = False
+    # 既定の公開時刻（既存記事の大半が 19:00 JST）と1日の本数
+    post_times: list[str] = ["19:00"]
+    slug_prefix: str = "yc-"
+    # アイキャッチは元写真を WP のメディアに取り込む（既存記事と同じ運用。2026-09-28 ユーザー判断）
+    upload_featured_image: bool = True
+    timeout_sec: float = 60.0
+
+    @property
+    def user(self) -> str:
+        return os.environ.get("WP_USER", "")
+
+    @property
+    def app_password(self) -> str:
+        return os.environ.get("WP_APP_PASSWORD", "")
+
+    def require_credentials(self) -> tuple[str, str]:
+        if not self.user or not self.app_password:
+            raise RuntimeError(
+                "WP_USER と WP_APP_PASSWORD が未設定です（WordPress の Application Password）。"
+                ".env か実行環境の環境変数に入れてください"
+            )
+        return self.user, self.app_password
+
+
+class LearningConfig(BaseModel):
+    # 非承認理由のタグ。審査画面の選択肢にもなる
+    tags: list[str] = [
+        "題材が合わない（小さくない・住まいでない）",
+        "デザインが弱い",
+        "写真が少ない・質が低い",
+        "物語が書けない（情報が薄い）",
+        "販売・広告の色が強い",
+        "既に紹介済み・似た事例がある",
+        "other",
+    ]
+    rule_min_hits: int = 3
+    batch_size: int = 20
+
+
 class Config(BaseModel):
     app: AppConfig = AppConfig()
     http: HttpConfig
     collect: CollectConfig = CollectConfig()
     sources: list[Source]
     scoring: ScoringConfig
+    drafting: DraftingConfig = DraftingConfig()
+    wordpress: WordPressConfig = WordPressConfig()
+    learning: LearningConfig = LearningConfig()
 
     @property
     def anthropic_api_key(self) -> str:

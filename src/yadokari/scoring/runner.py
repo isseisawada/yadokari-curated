@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from yadokari.config import Config
 from yadokari.db.connection import DbConnection
-from yadokari.db.repository import save_score, save_score_error, unscored
+from yadokari.db.repository import approved_rules, save_score, save_score_error, unscored
 from yadokari.logging_setup import get_logger
 from yadokari.scoring.client import ScoringClient, ScoringError
 from yadokari.scoring.prompt import SYSTEM_PROMPT, build_user_prompt
@@ -33,6 +33,9 @@ def score_pending(
     if not rows:
         return stats
     client = client or ScoringClient(config, SYSTEM_PROMPT)
+    # 学習ループで**人が承認した**ルールだけを載せる
+    if rules is None:
+        rules = approved_rules(conn)
     for row in rows:
         prompt = build_user_prompt(
             row["title"], row["source_url"], row["source"], row["content_text"] or "",

@@ -6,7 +6,11 @@ YADOKARI.net「世界の小さな家・動く家」キュレーション記事�
 収集 → 採点(LLM) → 審査(人) → 下書き生成 → 人が編集 → WordPress 予約投稿 → SNS
 ```
 
-いまできているのは**収集と採点**まで。
+できているもの: 収集・採点・審査画面・下書き生成・WordPress 送信（下書き／予約）・
+公開の確認・学習ループ・毎日の確認。**SNS はまだ**（どのアカウントに出すか未定）。
+
+実際の WordPress にはまだ一度も送っていない。最初の1本はユーザーの OK を取ってから
+（docs/operations.md）。
 
 ## 動かし方
 
@@ -20,6 +24,7 @@ python -m yadokari.cli collect --dry-run --limit 3
 python -m yadokari.cli collect
 python -m yadokari.cli score
 python -m yadokari.cli list --status scored
+python -m yadokari.cli serve
 ```
 
 `.env` に `ANTHROPIC_API_KEY` を入れる（採点に使う）。`DATABASE_URL` が空なら
@@ -40,6 +45,7 @@ python -m yadokari.cli list --status scored
 - `docs/existing-articles.md` — 既存記事121本の分析（型・画像の扱い・更新ペース）
 - `docs/source-survey.md` — ソース候補の実測
 - `docs/scoring.md` — 採点の軸と重み（案）
+- `docs/operations.md` — 運用の流れ・最初の本番の手順・秘匿値・毎日の確認
 
 frmg-jp/ig-post（FREMING CURATED）の net・db・採点クライアントを元にしている。
 共有ライブラリにはせず、コピーして作り変えている。

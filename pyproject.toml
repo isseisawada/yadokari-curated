@@ -12,12 +12,17 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
     "anthropic>=1.0",
+    # 審査画面
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
 # ruff はバージョンを固定する（frmg で、新しい ruff の既定ルール追加により
 # CI が30回連続で落ちた）。上げるときは手元で ruff check を通してから。
-dev = ["pytest>=8.0", "ruff>=0.16,<0.17"]
+dev = ["pytest>=8.0", "ruff>=0.16,<0.17", "httpx>=0.27"]
 postgres = ["psycopg[binary]>=3.1"]
 
 [project.scripts]
@@ -31,7 +36,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-yadokari = ["db/migrations/*.sql"]
+yadokari = ["db/migrations/*.sql", "web/templates/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,56 @@
+name: daily
+
+# 収集・採点・学習・WP の状態確認。
+# **GitHub の定期実行は3〜10時間遅れる**（frmg で実測）ので、時刻を守る用途には使わない。
+# 公開は WordPress の予約投稿に任せてあり、ここは遅れても困らない仕事だけ。
+on:
+  schedule:
+    - cron: "17 22 * * *"   # 07:17 JST（毎時0分は混むのでずらす）
+  workflow_dispatch:
+
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      WP_USER: ${{ secrets.WP_USER }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[postgres]"
+      - name: 設定の確認
+        id: check
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL が未設定なので何もしません（Actions の SQLite は毎回消えるため）"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: マイグレーション
+        if: steps.check.outputs.ready == 'true'
+        run: python -m yadokari.cli db migrate
+      - name: 収集
+        if: steps.check.outputs.ready == 'true'
+        run: python -m yadokari.cli collect
+      - name: 採点
+        if: steps.check.outputs.ready == 'true' && env.ANTHROPIC_API_KEY != ''
+        run: python -m yadokari.cli score --limit 60
+      - name: 学習ループ
+        if: steps.check.outputs.ready == 'true' && env.ANTHROPIC_API_KEY != ''
+        run: python -m yadokari.cli learn
+      - name: WordPress の状態確認
+        if: steps.check.outputs.ready == 'true' && env.WP_APP_PASSWORD != ''
+        run: python -m yadokari.cli wp sync
+      - name: 件数
+        if: steps.check.outputs.ready == 'true'
+        run: python -m yadokari.cli stats

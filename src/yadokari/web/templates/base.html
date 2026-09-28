@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}YADOKARI CURATED{% endblock %}</title>
+<style>
+  :root { --ink:#222; --sub:#777; --line:#e2e2e2; --bg:#fafaf7; --ok:#1f5c3d; --ng:#97372a; --accent:#2d6a8f; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.7 "Hiragino Sans","Noto Sans JP",sans-serif; }
+  header { display:flex; gap:20px; align-items:center; padding:12px 20px; border-bottom:1px solid var(--line); background:#fff; position:sticky; top:0; z-index:5; }
+  header b { letter-spacing:.08em; }
+  header a { color:var(--ink); text-decoration:none; }
+  header a.on { border-bottom:2px solid var(--ink); }
+  main { max-width:1100px; margin:0 auto; padding:20px 16px 80px; }
+  a { color:var(--accent); }
+  .flash { padding:10px 14px; background:#eef6ef; border-left:4px solid var(--ok); margin-bottom:16px; }
+  .error { padding:10px 14px; background:#fbeeec; border-left:4px solid var(--ng); margin-bottom:16px; }
+  .row { display:grid; grid-template-columns:120px 1fr; gap:16px; padding:14px 0; border-bottom:1px solid var(--line); }
+  .row img { width:120px; height:90px; object-fit:cover; background:#eee; }
+  .score { font-size:22px; font-weight:600; }
+  .muted { color:var(--sub); font-size:13px; }
+  .pill { display:inline-block; padding:0 8px; border:1px solid var(--line); border-radius:10px; font-size:12px; margin-right:4px; background:#fff; }
+  .tabs a { margin-right:14px; }
+  table { border-collapse:collapse; width:100%; }
+  td, th { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .gallery { display:flex; gap:6px; overflow-x:auto; padding:6px 0; }
+  .gallery img { height:140px; }
+  button, .btn { font:inherit; padding:8px 16px; border:1px solid var(--ink); background:#fff; cursor:pointer; }
+  button.ok { background:var(--ok); color:#fff; border-color:var(--ok); }
+  button.ng { background:var(--ng); color:#fff; border-color:var(--ng); }
+  button.primary { background:var(--ink); color:#fff; }
+  button[disabled] { opacity:.4; cursor:not-allowed; }
+  textarea, input[type=text], input[type=datetime-local], select { width:100%; font:inherit; padding:8px; border:1px solid #ccc; background:#fff; }
+  textarea { min-height:120px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  .preview { background:#fff; padding:20px; border:1px solid var(--line); }
+  .preview img { max-width:100%; }
+  .preview .wp-caption-text { font-size:12px; color:var(--sub); margin-top:2px; }
+  .warn { color:var(--ng); font-weight:600; }
+  @media (max-width: 800px) { .grid2 { grid-template-columns:1fr; } .row { grid-template-columns:80px 1fr; } .row img { width:80px; height:60px; } }
+</style>
+</head>
+<body>
+<header>
+  <b>YADOKARI CURATED</b>
+  <a href="/articles" class="{{ 'on' if request.url.path.startswith('/articles') }}">候補</a>
+  <a href="/drafts" class="{{ 'on' if request.url.path.startswith('/drafts') }}">下書き</a>
+  <a href="/rules" class="{{ 'on' if request.url.path.startswith('/rules') }}">学習ルール</a>
+</header>
+<main>
+  {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

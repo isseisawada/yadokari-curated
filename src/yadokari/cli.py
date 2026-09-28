@@ -5,6 +5,12 @@
     python -m yadokari.cli score [--limit 40]
     python -m yadokari.cli list [--status scored] [--min-score 50]
     python -m yadokari.cli stats
+    python -m yadokari.cli serve [--host 127.0.0.1] [--port 8000]
+    python -m yadokari.cli draft ARTICLE_ID
+    python -m yadokari.cli wp push DRAFT_ID [--schedule]
+    python -m yadokari.cli wp sync
+    python -m yadokari.cli learn
+    python -m yadokari.cli monitor
 """
 
 from __future__ import annotations
@@ -86,6 +92,93 @@ def _cmd_stats(cfg, args) -> int:
     return 0
 
 
+def _cmd_serve(cfg, args) -> int:
+    import uvicorn
+
+    from yadokari.web.app import create_app
+    from yadokari.web.auth import require_credentials
+
+    auth = require_credentials(args.host)
+    ensure_migrated(cfg.app.target())
+    uvicorn.run(create_app(cfg, auth=auth), host=args.host, port=args.port)
+    return 0
+
+
+def _cmd_draft(cfg, args) -> int:
+    from yadokari.drafting.generate import generate_for
+
+    ensure_migrated(cfg.app.target())
+    conn = connect(cfg.app.target())
+    try:
+        draft_id = generate_for(cfg, conn, args.article_id)
+        row = conn.execute("SELECT title, warnings FROM drafts WHERE id = ?", (draft_id,)).fetchone()
+    finally:
+        conn.close()
+    print(f"下書き {draft_id}: {row['title']}")
+    for w in json.loads(row["warnings"] or "[]"):
+        print("  要確認:", w)
+    return 0
+
+
+def _cmd_wp(cfg, args) -> int:
+    from yadokari.wordpress.publish import push, sync
+
+    ensure_migrated(cfg.app.target())
+    conn = connect(cfg.app.target())
+    try:
+        if args.action == "push":
+            if args.draft_id is None:
+                print("DRAFT_ID を指定してください")
+                return 2
+            r = push(cfg, conn, args.draft_id, schedule=args.schedule)
+            print(f"post {r.post_id} status={r.status} {r.link or ''}")
+            for n in r.notes:
+                print("  ", n)
+            return 0
+        res = sync(cfg, conn)
+    finally:
+        conn.close()
+    print(f"確認 {res.checked} 件 / 公開 {len(res.published)} 件")
+    for draft_id, link in res.published:
+        print(f"  公開: draft {draft_id} {link or ''}")
+    for draft_id, when in res.missed:
+        print(f"  要確認: draft {draft_id} は予定 {when} を過ぎても公開されていません（予約投稿の失敗）")
+    return 1 if res.missed else 0
+
+
+def _cmd_learn(cfg, args) -> int:
+    from yadokari.learning.loop import run_learning
+
+    ensure_migrated(cfg.app.target())
+    conn = connect(cfg.app.target())
+    try:
+        stats = run_learning(cfg, conn)
+    finally:
+        conn.close()
+    print(stats.summary())
+    for line in stats.new_candidates:
+        print("  提案:", line)
+    return 0
+
+
+def _cmd_monitor(cfg, args) -> int:
+    from yadokari.monitor import check
+
+    conn = None
+    try:
+        conn = connect(cfg.app.target())
+    except Exception as exc:  # noqa: BLE001 - DB が落ちていても WP 側は確かめる
+        print(f"要確認: DB に繋がりません: {exc}")
+    try:
+        report = check(cfg, conn)
+    finally:
+        if conn is not None:
+            conn.close()
+    print("\n".join(report.lines))
+    print("判定:", "OK" if report.ok else "要確認")
+    return 0 if report.ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="yadokari")
     parser.add_argument("--config", default="config.yaml")
@@ -113,6 +206,27 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("stats", help="ソース別・状態別の件数")
     p.set_defaults(func=_cmd_stats)
+
+    p = sub.add_parser("serve", help="審査画面を起動する")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.set_defaults(func=_cmd_serve)
+
+    p = sub.add_parser("draft", help="承認済みの記事から下書きを作る")
+    p.add_argument("article_id", type=int)
+    p.set_defaults(func=_cmd_draft)
+
+    p = sub.add_parser("wp", help="WordPress への送信と状態の確認")
+    p.add_argument("action", choices=["push", "sync"])
+    p.add_argument("draft_id", type=int, nargs="?")
+    p.add_argument("--schedule", action="store_true", help="予約投稿にする（allow_schedule が要る）")
+    p.set_defaults(func=_cmd_wp)
+
+    p = sub.add_parser("learn", help="非承認理由からルール候補を育てる")
+    p.set_defaults(func=_cmd_learn)
+
+    p = sub.add_parser("monitor", help="昨日・今日の分が出たかを確かめる")
+    p.set_defaults(func=_cmd_monitor)
 
     args = parser.parse_args(argv)
     cfg = load_config(args.config)

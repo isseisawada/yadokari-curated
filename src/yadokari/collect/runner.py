@@ -216,7 +216,8 @@ def collect_source(
             published_at=it.published_at,
             content_text=page.text,
             image_urls=page.images,
-            og_image=page.og_image,
+            # フィードだけで回すソース（Dezeen）は og:image が無いので本文の1枚目で代える
+            og_image=page.og_image or (page.images[0] if page.images else None),
             photo_credit=page.credit,
         )
         if dry_run or conn is None:

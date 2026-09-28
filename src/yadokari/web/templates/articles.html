@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="tabs">
+  <a href="/articles?status=scored">審査待ち（{{ threshold|int }}点以上）</a>
+  <a href="/articles?status=scored&all=1">採点済みすべて（{{ counts.get('scored', 0) }}）</a>
+  <a href="/articles?status=approved">承認（{{ counts.get('approved', 0) }}）</a>
+  <a href="/articles?status=rejected">非承認（{{ counts.get('rejected', 0) }}）</a>
+  <a href="/articles?status=collected">未採点（{{ counts.get('collected', 0) }}）</a>
+</div>
+{% for r in rows %}
+  {% set a = r['assessment']|fromjson %}
+  <div class="row">
+    <a href="/articles/{{ r['id'] }}">{% if r['og_image'] %}<img src="{{ r['og_image'] }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<img alt="">{% endif %}</a>
+    <div>
+      <div><span class="score">{{ '%.1f'|format(r['score']) if r['score'] is not none else '−' }}</span>
+        <a href="/articles/{{ r['id'] }}">{{ r['title'] or r['source_url'] }}</a></div>
+      <div class="muted">{{ r['source'] }} ・ 写真{{ r['image_count'] }}枚
+        {% if a %}・ {{ a['kind'] }} ・ {{ a['facts']['country'] }}{% if not a['relevant'] %} ・ <span class="warn">対象外: {{ a['relevant_reason'] }}</span>{% endif %}{% endif %}
+        {% if r['score_error'] %} ・ <span class="warn">採点失敗</span>{% endif %}</div>
+      {% if a %}<div>{{ a['summary_ja'] }}</div>{% endif %}
+    </div>
+  </div>
+{% else %}
+  <p class="muted">ありません。</p>
+{% endfor %}
+{% endblock %}
