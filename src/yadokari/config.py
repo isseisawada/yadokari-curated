@@ -85,10 +85,15 @@ class Source(BaseModel):
     url_include: str | None = None
     fetch_article: bool = True
     prefilter: bool = False
+    # 利用規約で自動収集を禁じているサイト。**自動では一切取りに行かない。**
+    # 人が審査画面の「手動で追加」から URL と本文・写真URLを入れる（ページも取得しない）
+    manual_only: bool = False
     note: str | None = None
 
     @model_validator(mode="after")
     def _has_entry(self) -> Source:
+        if self.manual_only:
+            return self
         if not self.feed and not self.index_urls:
             raise ValueError(f"{self.name}: feed か index_urls のどちらかが要る")
         if self.index_urls and not self.url_include:

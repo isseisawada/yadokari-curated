@@ -55,3 +55,22 @@ def score_pending(
         conn.commit()
         stats.scored += 1
     return stats
+
+
+def score_one(config: Config, conn: DbConnection, article_id: int,
+              client: ScoringClient | None = None) -> float:
+    """1件だけ採点する（手動投入の直後に画面から）。"""
+    row = conn.execute("SELECT * FROM articles WHERE id = ? AND status = 'collected'",
+                       (article_id,)).fetchone()
+    if row is None:
+        raise ValueError("未採点の記事ではありません")
+    client = client or ScoringClient(config, SYSTEM_PROMPT)
+    a = client.assess(build_user_prompt(
+        row["title"], row["source_url"], row["source"], row["content_text"] or "",
+        row["image_count"], row["photo_credit"], rules=approved_rules(conn),
+    ))
+    axes = build_axes(config.scoring.weights, a, row["image_count"], row["published_at"])
+    score = total(axes, a)
+    save_score(conn, row["id"], score, {ax.name: ax.to_dict() for ax in axes}, a.to_dict(), client.model)
+    conn.commit()
+    return score

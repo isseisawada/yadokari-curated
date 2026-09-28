@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>手動で追加</h2>
+<p class="muted">利用規約で自動収集を禁じているサイト用です。<b>システムはページを取りに行きません。</b>ブラウザで読んだ記事の内容を入れてください。</p>
+<form method="post" action="/manual" style="max-width:760px">
+  <label>媒体</label>
+  <select name="source">{% for s in sources %}<option value="{{ s }}">{{ s }}{% if notes[s] %}（{{ notes[s] }}）{% endif %}</option>{% endfor %}</select>
+  <label>元記事の URL</label><input type="text" name="url" required>
+  <label>タイトル</label><input type="text" name="title" required>
+  <label>本文（元記事の本文を貼る。採点と下書きの材料になり、事実はここにあるものだけ使います）</label>
+  <textarea name="text" style="min-height:260px" required></textarea>
+  <label>写真の URL（1行に1つ。記事に並べる順に）</label>
+  <textarea name="images" style="min-height:120px"></textarea>
+  <label>写真クレジット（あれば）</label><input type="text" name="credit">
+  <p><button class="primary">追加する</button></p>
+</form>
+{% endblock %}

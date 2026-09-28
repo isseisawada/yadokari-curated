@@ -5,6 +5,7 @@
     /articles/{id}/draft  承認したものの下書きを作る（LLM）
     /drafts             下書きの一覧
     /drafts/{id}        下書きの編集・日時指定・WordPress に送る
+    /manual             手動投入（規約で自動収集を禁じているサイト用。ページは取得しない）
     /rules              学習ループのルール候補（人が承認したものだけ採点に効く）
     /healthz            認証なし。DB に触らない
 
@@ -53,7 +54,7 @@ FACT_LABELS = {
 
 
 def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, wp_factory=None,
-               fetch=None) -> FastAPI:
+               fetch=None, scorer=None) -> FastAPI:
     """drafter / wp_factory / fetch はテストで差し替える（外部に出ないように）。"""
     app = FastAPI(title="YADOKARI CURATED")
     if auth is not None:
@@ -258,6 +259,40 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
         if res.missed:
             return back("/drafts", err=msg + f"。予約時刻を過ぎても公開されていないものが {len(res.missed)} 件あります（WP の予約投稿の失敗）")
         return back("/drafts", msg=msg)
+
+    # ------------------------------------------------------------------
+    manual_sources = [s.name for s in config.sources if s.manual_only]
+
+    @app.get("/manual", response_class=HTMLResponse)
+    def manual_form(request: Request):
+        notes = {s.name: s.note for s in config.sources if s.manual_only}
+        return render(request, "manual.html", sources=manual_sources, notes=notes)
+
+    @app.post("/manual")
+    def manual_add(source: str = Form(...), url: str = Form(...), title: str = Form(...),
+                   text: str = Form(...), images: str = Form(""), credit: str = Form("")):
+        from yadokari.collect.manual import add_manual
+
+        with db() as conn:
+            try:
+                res = add_manual(config, conn, source=source, url=url, title=title, text=text,
+                                 image_urls=images.splitlines(), credit=credit)
+            except (ValueError, KeyError) as exc:
+                return back("/manual", err=str(exc))
+        if res.duplicate:
+            return back("/manual", err="その URL は既に入っています")
+        return back(f"/articles/{res.article_id}", msg="追加しました。採点ボタンで採点できます")
+
+    @app.post("/articles/{article_id}/score")
+    def score_now(article_id: int):
+        from yadokari.scoring.runner import score_one
+
+        with db() as conn:
+            try:
+                score = score_one(config, conn, article_id, client=scorer)
+            except Exception as exc:  # noqa: BLE001 - 失敗の理由を画面に出す
+                return back(f"/articles/{article_id}", err=f"採点できませんでした: {exc}")
+        return back(f"/articles/{article_id}", msg=f"採点しました（{score:.1f}点）")
 
     # ------------------------------------------------------------------
     @app.get("/rules", response_class=HTMLResponse)

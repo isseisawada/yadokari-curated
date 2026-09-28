@@ -10,6 +10,7 @@
 <div>
   <h3>採点 {{ '%.1f'|format(a['score']) if a['score'] is not none else '（未採点）' }}</h3>
   {% if a['score_error'] %}<p class="warn">採点に失敗: {{ a['score_error'] }}</p>{% endif %}
+  {% if a['status'] == 'collected' %}<form method="post" action="/articles/{{ a['id'] }}/score"><button>採点する</button></form>{% endif %}
   {% if assessment %}
     {% if not assessment['relevant'] %}<p class="warn">対象外と判定: {{ assessment['relevant_reason'] }}</p>{% endif %}
     <table>

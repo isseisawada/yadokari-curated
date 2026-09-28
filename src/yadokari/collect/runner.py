@@ -142,6 +142,10 @@ def collect_source(
     dry_run: bool = False,
 ) -> SourceStats:
     stats = SourceStats(source=source.name)
+    if source.manual_only:
+        # 名前を指定して呼ばれても取りに行かない（利用規約で自動収集が禁止）
+        log.info("%s: 手動投入のみのソースなので自動収集しません", source.name)
+        return stats
     limit = limit or config.collect.per_source_limit
     cutoff = datetime.now(UTC) - timedelta(days=config.collect.lookback_days)
 
@@ -246,7 +250,7 @@ def collect_all(
         for source in config.sources:
             if names and source.name not in names:
                 continue
-            if not source.enabled and not names:
+            if (not source.enabled and not names) or source.manual_only:
                 continue
             stats = collect_source(config, client, conn, source, limit=limit, dry_run=dry_run)
             log.info(stats.summary())

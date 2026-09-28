@@ -85,3 +85,33 @@ ArchDaily の一覧を実測し、足りなければソースを足す。
 
 許諾を取るなら**ビルダー・建築事務所に直接**が筋。ビルダー由来の写真が多いソース
 （Tiny House Talk など）は、許諾ベースの運用と相性がよい。
+
+## 利用規約の確認（2026-09-28）
+
+各サイトの規約ページを読み、自動収集・スクレイピングの禁止条項を探した。
+**禁止しているものは `manual_only`（手動投入のみ。システムはページを取得しない）にした。**
+
+| ソース | 結果 | 扱い |
+|---|---|---|
+| **ArchDaily** | **禁止。** "use an automatic device (such as a robot or spider) or manual process to copy or 'scrape' the Website or Website Content for any purpose without the express written permission of ArchDaily" | manual_only |
+| **Dwell**（運営 Ziff Davis の規約） | **禁止。** "use any robot, spider ... to crawl, scrape, database scrape, screen scrape, harvest, gather, extract, retrieve or index any portion of the Services" | manual_only |
+| **Gessato** | **禁止。** "prohibited from using any data mining, robots, or other data gathering systems and extraction tools" | manual_only |
+| New Atlas | 自動収集の禁止条項は見当たらない。ただし "use or attempt to use any Material published on the New Atlas Website to create any web site or publication" を禁止 | 自動収集は継続。**写真・文章の転載は規約上の問題がある**（下記） |
+| Dezeen | 規約ページがデータセンターから 403 で読めない | 継続（未確認） |
+| designboom | /legal/ は短く、規約本体は daaily.com にあり robots.txt が取れず未確認 | 継続（未確認） |
+| Tiny House Talk | 規約ページが見つからない（/disclaimer/ に禁止条項なし） | 継続 |
+| Leibal | 規約ページが見つからない | 継続 |
+| Tiny House Blog | /terms-of-service/ に禁止条項なし | 継続 |
+
+**注意（推測を含む）:**
+
+- 規約の確認は、この調査より**前**に ArchDaily・Dwell・Gessato のページを実測と試験収集で
+  取得していた（各数件〜数十件、3秒間隔・robots 許可の範囲）。試験用の DB からは削除した
+- ArchDaily の条項は「手作業でのコピー」まで書面の許可なしに禁じている。**既存の YADOKARI 記事の
+  写真（ArchDaily の画像328枚の直リンク）も、この条項との関係を確認した方がよい**
+- New Atlas も素材の転載を禁じている。直リンク＋via の運用が規約上どう扱われるかは、
+  規約の文言だけでは判断できない（法的判断ではない）
+
+**量への影響:** 自動で回るのは Tiny House Talk・New Atlas・designboom・Leibal・Dezeen・
+Tiny House Blog。見立ては**週8〜12本**（推測）。1日1本（週7本）は、候補のほとんどを
+承認しないと届かない。手動投入と、規約で許されるソースの追加が要る。
