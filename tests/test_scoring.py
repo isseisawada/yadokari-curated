@@ -147,3 +147,10 @@ def test_trailer_scores_higher_than_cabin_of_same_quality(config):
     cabin = Assessment.from_json(_payload(kind="cabin_hut"))
     w = config.scoring.weights
     assert total(build_axes(w, trailer, 7, None), trailer) > total(build_axes(w, cabin, 7, None), cabin)
+
+
+def test_prompt_keeps_domestic_facilities_in_scope():
+    """trial #1（2026-09-29）で、公開実績の「Morinest 北軽井沢」（国内のトレーラーハウスホテル）が
+    「海外事例ではない」で0点になった。国内の施設も題材に含める。"""
+    assert "国内の事例も対象" in SYSTEM_PROMPT
+    assert "海外か国内かでは落とさない" in SYSTEM_PROMPT
