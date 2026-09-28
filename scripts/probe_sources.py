@@ -151,7 +151,7 @@ def probe(src: tuple[str, str, list[str]]) -> dict:
     f = Fetcher()
     row: dict = {"name": name, "feed": "", "status": ""}
     feed = None
-    for url in candidates + [None]:
+    for url in [*candidates, None]:
         if url is None:
             url = _discover_feed(f, home)
             if url is None:
