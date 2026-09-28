@@ -11,6 +11,10 @@
     python -m yadokari.cli wp sync
     python -m yadokari.cli learn
     python -m yadokari.cli monitor
+    python -m yadokari.cli report
+    python -m yadokari.cli validate import validation/positives.tsv --label pos [--limit N]
+    python -m yadokari.cli validate score
+    python -m yadokari.cli validate report
 """
 
 from __future__ import annotations
@@ -179,6 +183,41 @@ def _cmd_monitor(cfg, args) -> int:
     return 0 if report.ok else 1
 
 
+def _cmd_report(cfg, args) -> int:
+    from yadokari.report import weekly
+
+    conn = connect(cfg.app.target())
+    try:
+        print(weekly(conn, days=args.days))
+    finally:
+        conn.close()
+    return 0
+
+
+def _cmd_validate(cfg, args) -> int:
+    from yadokari import validation
+
+    ensure_migrated(cfg.app.target())
+    conn = connect(cfg.app.target())
+    try:
+        if args.action == "import":
+            if not args.file:
+                print("取り込むファイルを指定してください")
+                return 2
+            st = validation.import_list(cfg, conn, args.file, args.label, limit=args.limit)
+            print(f"取り込み {st.added} 件 / 既にある {st.existing} 件 / 取得失敗 {len(st.failed)} 件")
+            for f in st.failed:
+                print("  失敗:", f)
+        elif args.action == "score":
+            ok, ng = validation.score_all(cfg, conn, limit=args.limit or 200)
+            print(f"採点 {ok} 件（失敗 {ng}）")
+        else:
+            print(validation.report(cfg, conn))
+    finally:
+        conn.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="yadokari")
     parser.add_argument("--config", default="config.yaml")
@@ -227,6 +266,17 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("monitor", help="昨日・今日の分が出たかを確かめる")
     p.set_defaults(func=_cmd_monitor)
+
+    p = sub.add_parser("report", help="週次レポート")
+    p.add_argument("--days", type=int, default=7)
+    p.set_defaults(func=_cmd_report)
+
+    p = sub.add_parser("validate", help="採点の検証（載せたい／載せたくない見本）")
+    p.add_argument("action", choices=["import", "score", "report"])
+    p.add_argument("file", nargs="?")
+    p.add_argument("--label", choices=["pos", "neg"], default="pos")
+    p.add_argument("--limit", type=int)
+    p.set_defaults(func=_cmd_validate)
 
     args = parser.parse_args(argv)
     cfg = load_config(args.config)

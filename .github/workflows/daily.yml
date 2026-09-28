@@ -51,6 +51,8 @@ jobs:
       - name: WordPress の状態確認
         if: steps.check.outputs.ready == 'true' && env.WP_APP_PASSWORD != ''
         run: python -m yadokari.cli wp sync
-      - name: 件数
+      - name: 件数と週次レポート
         if: steps.check.outputs.ready == 'true'
-        run: python -m yadokari.cli stats
+        run: |
+          python -m yadokari.cli stats
+          python -m yadokari.cli report

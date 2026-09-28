@@ -82,6 +82,8 @@ python -m yadokari.cli wp push DRAFT_ID [--schedule]
 python -m yadokari.cli wp sync
 python -m yadokari.cli learn
 python -m yadokari.cli monitor
+python -m yadokari.cli report
+python -m yadokari.cli validate import|score|report
 ```
 
 ## 分かっている制約

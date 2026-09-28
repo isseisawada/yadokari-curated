@@ -44,8 +44,19 @@ YADOKARI の既存記事121本の分析（docs/existing-articles.md）から起�
   （`scoring.fallbacks: true`）
 - Haiku 4.5 に下げる場合は `effort: null` にすること（Haiku は effort を受け付けず 400 で全件落ちる。frmg で踏んだ）
 
-## 検証のしかた（次にやること）
+## 検証のしかた
 
-YADOKARI の既存記事の元記事（ArchDaily・Dwell など）を「載せたい」、
-最近の候補から人が落とすものを「載せたくない」として数本ずつ採点し、
-点の並びが人の判断と合うかを見る。
+```
+python -m yadokari.cli validate import validation/positives.tsv --label pos
+python -m yadokari.cli validate import validation/negatives.tsv --label neg
+python -m yadokari.cli validate score
+python -m yadokari.cli validate report
+```
+
+- **載せたい（pos）**: `validation/positives.tsv`。YADOKARI が 2024年以降に実際に記事にした
+  元記事 104本（既存記事の本文の最初の出典リンク）。2026-09-28 に取り込みを試し、89本取れた
+  （Dezeen はデータセンターから 403、Small House Bliss などは robots で不可）
+- **載せたくない（neg）**: `validation/negatives.tsv`。**人が選ぶ**（5〜10本）。
+  これが入ると、採点が見分けられているか（AUC）が出る
+- report は「載せたいのに点が低いもの」を並べる。軸と重みを見直す手がかりにする
+- 見本は審査の候補とは別のテーブル（validation）に置き、審査画面には出さない
