@@ -80,3 +80,6 @@ python -m yadokari.cli validate report
 - **量産型のトレーラーハウスを下げる**: 非承認の理由「よくある車検なしトレーラーなのでNG」から。
   ユーザーの指示で、学習ループ（同じ理由3回）を待たずに承認済みのルールとして入れた
   （rule_candidates の reason_tag `mass_produced_trailer`、審査画面の RULES で直せる）
+  - ルールだけでは足りなかった: デザイン・物語は 40 以下になったが、小ささ・写真・SEO が満点なので
+    61〜65点で審査待ちに残った。採点に `catalog_model`（量産型・カタログ型か）を足し、true なら
+    **45点で頭打ち**（審査ライン50の下）にした（`scoring/weights.py` の CATALOG_CAP）

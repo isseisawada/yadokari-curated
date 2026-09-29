@@ -127,7 +127,14 @@ def build_axes(
     ]
 
 
+# 量産型（カタログ型）は審査ライン（50）の下に止める。消さずに「採点済み」には残す。
+# 2026-09-29: ルールでデザイン・物語を 40 以下にさせても、小ささ・写真・SEO が満点なので
+# 61〜65点で審査待ちに残った。軸をいじるより上限で止める方が確実
+CATALOG_CAP = 45.0
+
+
 def total(axes: list[Axis], a: Assessment) -> float:
     if not a.relevant:
         return 0.0
-    return round(sum(ax.score * ax.weight for ax in axes), 1)
+    score = round(sum(ax.score * ax.weight for ax in axes), 1)
+    return min(score, CATALOG_CAP) if a.catalog_model else score

@@ -43,7 +43,7 @@ OUTPUT_SCHEMA: dict = {
     "type": "object",
     "additionalProperties": False,
     "required": [
-        "relevant", "relevant_reason", "kind", "facts",
+        "relevant", "relevant_reason", "kind", "catalog_model", "facts",
         "design_score", "design_reason", "story_score", "story_reason",
         "japan_score", "japan_reason", "summary_ja", "highlights", "suggested_tags",
     ],
@@ -51,6 +51,8 @@ OUTPUT_SCHEMA: dict = {
         "relevant": {"type": "boolean"},
         "relevant_reason": _STR,
         "kind": {"type": "string", "enum": KINDS},
+        # ビルダーのカタログに並ぶ量産型・よくある形か（2026-09-29 審査「よくある車検なしトレーラー」）
+        "catalog_model": {"type": "boolean"},
         "facts": {
             "type": "object",
             "additionalProperties": False,
@@ -92,6 +94,7 @@ class Assessment:
     summary_ja: str
     highlights: list[str] = field(default_factory=list)
     suggested_tags: list[str] = field(default_factory=list)
+    catalog_model: bool = False
 
     @classmethod
     def from_json(cls, data: dict) -> Assessment:
@@ -111,6 +114,7 @@ class Assessment:
             summary_ja=str(data.get("summary_ja") or ""),
             highlights=[str(x) for x in data.get("highlights") or []],
             suggested_tags=[str(x) for x in data.get("suggested_tags") or []],
+            catalog_model=bool(data.get("catalog_model")),
         )
 
     def to_dict(self) -> dict:
@@ -118,6 +122,7 @@ class Assessment:
             "relevant": self.relevant,
             "relevant_reason": self.relevant_reason,
             "kind": self.kind,
+            "catalog_model": self.catalog_model,
             "facts": self.facts,
             "design_score": self.design_score,
             "design_reason": self.design_reason,

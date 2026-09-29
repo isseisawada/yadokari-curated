@@ -154,3 +154,13 @@ def test_prompt_keeps_domestic_facilities_in_scope():
     「海外事例ではない」で0点になった。国内の施設も題材に含める。"""
     assert "国内の事例も対象" in SYSTEM_PROMPT
     assert "海外か国内かでは落とさない" in SYSTEM_PROMPT
+
+
+def test_catalog_model_is_capped_below_review_line(config):
+    """2026-09-29: 量産型トレーラーはデザイン・物語を下げても 61〜65点で審査待ちに残った。上限で止める。"""
+    w = config.scoring.weights
+    normal = Assessment.from_json(_payload(kind="tiny_house_on_wheels"))
+    catalog = Assessment.from_json(_payload(kind="tiny_house_on_wheels", catalog_model=True))
+    assert total(build_axes(w, normal, 7, None), normal) > config.scoring.review_threshold
+    assert total(build_axes(w, catalog, 7, None), catalog) < config.scoring.review_threshold
+    assert "catalog_model" in OUTPUT_SCHEMA["required"]
