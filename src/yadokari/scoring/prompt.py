@@ -67,6 +67,10 @@ SYSTEM_PROMPT = f"""あなたは YADOKARI.net の編集者です。YADOKARI は�
 """
 
 
+# 採点に渡す本文の上限（文字）。判断には冒頭で足りる。長い記事で費用がかさまないように
+MAX_TEXT_CHARS = 5000
+
+
 def build_user_prompt(
     title: str | None, url: str, source: str, text: str, image_count: int, credit: str | None,
     rules: list[str] | None = None,
@@ -81,6 +85,6 @@ def build_user_prompt(
         f"URL: {url}\n"
         f"記事中の写真の枚数: {image_count}\n"
         f"写真クレジット: {credit or '（見当たらない）'}\n\n"
-        f"# 本文\n{text}"
+        f"# 本文\n{text[:MAX_TEXT_CHARS]}"
     )
     return "\n\n".join(parts)

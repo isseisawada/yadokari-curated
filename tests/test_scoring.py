@@ -69,6 +69,7 @@ def test_assessment_clamps_and_blanks():
 
 
 def test_request_uses_fallbacks_and_effort(config):
+    config.scoring.effort, config.scoring.fallbacks = "low", True
     client, messages = _client(config, _response(_payload()))
     client.assess("記事")
     call = messages.calls[0]
@@ -164,3 +165,9 @@ def test_catalog_model_is_capped_below_review_line(config):
     assert total(build_axes(w, normal, 7, None), normal) > config.scoring.review_threshold
     assert total(build_axes(w, catalog, 7, None), catalog) < config.scoring.review_threshold
     assert "catalog_model" in OUTPUT_SCHEMA["required"]
+
+
+def test_haiku_scoring_sends_no_effort(config):
+    """2026-09-29: 課金を下げるため採点を Haiku 4.5 に。Haiku に effort を送ると 400 で全件落ちる。"""
+    assert config.scoring.model == "claude-haiku-4-5"
+    assert config.scoring.effort is None and config.scoring.fallbacks is False

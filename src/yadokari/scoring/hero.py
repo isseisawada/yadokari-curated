@@ -21,7 +21,7 @@ from yadokari.logging_setup import get_logger
 log = get_logger(__name__)
 
 # 見せる枚数の上限。外観はたいてい最初の数枚にある。多いほど費用がかかる
-MAX_CANDIDATES = 8
+MAX_CANDIDATES = 5
 
 SYSTEM = """あなたは建築メディアの写真編集者です。
 小さな家・キャビン・トレーラーハウスなどを紹介する記事の写真が、番号付きで何枚か渡されます。
