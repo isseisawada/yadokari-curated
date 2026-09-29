@@ -95,7 +95,24 @@
   .bar i { display:block; height:100%; background:var(--ink); }
   .note { grid-column:2 / 4; color:#555; font-size:12px; margin-top:-4px; }
   @media (max-width:1000px) { .cards { grid-template-columns:repeat(2,1fr); gap:32px 24px; } .grid2 { grid-template-columns:1fr; } }
-  @media (max-width:640px) { .cards { grid-template-columns:1fr; } .gh { gap:16px; height:64px; } .gh nav { gap:14px; } .gh nav a { font-size:14px; } .logo { font-size:20px; } h2 { font-size:22px; } }
+  @media (max-width:640px) {
+    .cards { grid-template-columns:1fr; }
+    /* スマホで横にはみ出さないように（2026-09-29）。右端の文言は隠し、メニューは詰める */
+    .gh { gap:12px; height:56px; padding:0 12px; }
+    .gh .right { display:none; }
+    .gh nav { gap:12px; min-width:0; }
+    .gh nav a { font-size:13px; }
+    .logo { font-size:18px; flex:none; }
+    .sub { padding:14px 12px; gap:10px; }
+    .sub .tabs { margin-left:0; gap:6px 16px; }
+    main { padding:20px 12px 80px; }
+    h2 { font-size:22px; overflow-wrap:anywhere; }
+    a, td, p { overflow-wrap:anywhere; }
+    .gallery img { height:140px; }
+    .gallery figure.hero img { height:200px; }
+    .axis { grid-template-columns:96px 1fr 36px; }
+  }
+  html, body { overflow-x:hidden; }
 </style>
 </head>
 <body>
