@@ -31,6 +31,7 @@
   {% if a['status'] == 'collected' %}<form method="post" action="/articles/{{ a['id'] }}/score"><button>採点する</button></form>{% endif %}
   {% if assessment %}
     {% if not assessment['relevant'] %}<p class="warn">対象外と判定: {{ assessment['relevant_reason'] }}</p>{% endif %}
+    {% if assessment['catalog_model'] %}<p class="warn">量産型・カタログ型と判定（45点で頭打ち）</p>{% endif %}
     {% for key, label in axis_labels.items() %}{% if detail and key in detail %}
       <div class="axis"><b>{{ label }}</b><div class="bar"><i style="width:{{ detail[key]['score']|int }}%"></i></div><span class="date">{{ detail[key]['score']|int }}</span>
         <div class="note">重み {{ detail[key]['weight'] }} ・ {{ detail[key]['note'] }}</div></div>
