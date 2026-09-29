@@ -24,6 +24,7 @@ from yadokari.drafting.render import (
 from yadokari.drafting.seo import checks, failed
 from yadokari.llm import call_json, make_client
 from yadokari.logging_setup import get_logger
+from yadokari.scoring.hero import ordered_images
 
 log = get_logger(__name__)
 
@@ -96,8 +97,9 @@ def generate(config: Config, row: Row, client=None) -> Draft:
     assert parts is not None
 
     facts, dropped = checked_facts((assessment or {}).get("facts") or {}, check_source)
-    images = json.loads(row["image_urls"] or "[]")[: d.max_images]
-    featured = row["og_image"] or (images[0] if images else None)
+    # 1枚目は外観（scoring/hero.py で選んだもの）。選んでいなければ元記事の og:image
+    images = ordered_images(row)[: d.max_images]
+    featured = row["hero_image"] or row["og_image"] or (images[0] if images else None)
     tags = seo.tags_for((assessment or {}).get("kind", ""),
                         (assessment or {}).get("suggested_tags") or [])
     link_keywords = [keyword] + [k for k in seo.required_tags if k != keyword]

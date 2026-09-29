@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 DEFAULT_CONFIG = Path("config.yaml")
 
@@ -92,6 +92,8 @@ class Source(BaseModel):
     # ArchDaily の cabins 一覧は少し前の作品も並ぶ。既存記事も数年前の作品を紹介している
     lookback_days: int | None = None
     note: str | None = None
+    # 審査画面のラベルの色（#RRGGBB）。媒体の雰囲気に合わせる。未指定ならグレー
+    color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
 
     @model_validator(mode="after")
     def _has_entry(self) -> Source:

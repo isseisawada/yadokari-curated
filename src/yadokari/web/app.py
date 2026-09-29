@@ -30,6 +30,7 @@ from yadokari.config import Config
 from yadokari.db import repository as repo
 from yadokari.db.connection import connect
 from yadokari.logging_setup import get_logger
+from yadokari.scoring.hero import ordered_images, set_hero
 from yadokari.web.auth import BasicAuth, BasicAuthMiddleware
 
 log = get_logger(__name__)
@@ -81,6 +82,16 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
             dt = dt.replace(tzinfo=UTC)
         return dt.astimezone(tz).strftime(fmt)
 
+    source_colors = {s.name: s.color for s in config.sources if s.color}
+
+    def source_style(name: str | None) -> str:
+        """媒体ラベルの背景色と、読める文字色（明るい背景なら黒字）。"""
+        bg = source_colors.get(name or "", "#9B9B9B")
+        r, g, b = (int(bg[i:i + 2], 16) for i in (1, 3, 5))
+        fg = "#000" if (0.299 * r + 0.587 * g + 0.114 * b) > 150 else "#fff"
+        return f"background:{bg};color:{fg}"
+
+    TEMPLATES.env.filters["source_style"] = source_style
     TEMPLATES.env.filters["local"] = local
     TEMPLATES.env.filters["fromjson"] = lambda s: json.loads(s) if s else None
 
@@ -91,10 +102,13 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
         return TEMPLATES.TemplateResponse(request, name, ctx)
 
     def back(url: str, msg: str | None = None, err: str | None = None) -> RedirectResponse:
-        from urllib.parse import urlencode
+        from urllib.parse import parse_qsl, urlencode
 
-        q = {k: v for k, v in (("msg", msg), ("err", err)) if v}
-        return RedirectResponse(url + ("?" + urlencode(q) if q else ""), status_code=303)
+        # url が元のクエリ（一覧の絞り込み）を持っていれば残し、前回の msg/err だけ差し替える
+        path, _, query = url.partition("?")
+        q = [(k, v) for k, v in parse_qsl(query) if k not in ("msg", "err")]
+        q += [(k, v) for k, v in (("msg", msg), ("err", err)) if v]
+        return RedirectResponse(path + ("?" + urlencode(q) if q else ""), status_code=303)
 
     # ------------------------------------------------------------------
     @app.get("/healthz")
@@ -114,7 +128,7 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
             counts = {r["status"]: r["n"] for r in conn.execute(
                 "SELECT status, COUNT(*) AS n FROM articles GROUP BY status").fetchall()}
         return render(request, "articles.html", rows=rows, status=status, all=all, counts=counts,
-                      threshold=config.scoring.review_threshold)
+                      threshold=config.scoring.review_threshold, tags=config.learning.tags)
 
     @app.get("/articles/{article_id}", response_class=HTMLResponse)
     def article(request: Request, article_id: int):
@@ -130,7 +144,7 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
             request, "article.html", a=row, draft=draft, feedback=feedback,
             assessment=json.loads(row["assessment"]) if row["assessment"] else None,
             detail=json.loads(row["score_detail"]) if row["score_detail"] else None,
-            images=json.loads(row["image_urls"] or "[]"),
+            images=ordered_images(row),
             axis_labels=AXIS_LABELS, fact_labels=FACT_LABELS, tags=config.learning.tags,
         )
 
@@ -143,21 +157,47 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
         return None
 
     @app.post("/articles/{article_id}/decide")
-    def decide(article_id: int, decision: str = Form(...), tag: str = Form(""),
-               reason: str = Form("")):
+    def decide(request: Request, article_id: int, decision: str = Form(...), tag: str = Form(""),
+               reason: str = Form(""), next: str = Form("")):
+        # 一覧から押したときは一覧に戻す（next は /articles で始まるものだけ受け付ける）。
+        # 一覧の JS は fetch で送ってくるので、そのときは JSON で返してカードだけ消す
+        from_list = next if next.startswith("/articles") and "//" not in next else ""
+        wants_json = request.headers.get("x-requested-with") == "fetch"
+        fail_to = from_list or f"/articles/{article_id}"
+
+        def fail(msg: str):
+            if wants_json:
+                return JSONResponse({"ok": False, "error": msg}, status_code=400)
+            return back(fail_to, err=msg)
+
         if decision == "rejected" and not (tag or reason.strip()):
-            return back(f"/articles/{article_id}", err="非承認には理由（タグか自由記述）を入れてください。学習ループの入力になります")
+            return fail("非承認には理由（タグか自由記述）を入れてください。学習ループの入力になります")
         with db() as conn:
             try:
                 repo.decide(conn, article_id, decision, reason=reason, tag=tag or None)
                 conn.commit()
             except ValueError as exc:
-                return back(f"/articles/{article_id}", err=str(exc))
+                return fail(str(exc))
             nxt = _next_unreviewed(conn, article_id)
         label = "承認" if decision == "approved" else "非承認"
+        if wants_json:
+            return JSONResponse({"ok": True, "message": f"{label}しました"})
+        if from_list:
+            return back(from_list, msg=f"{label}しました")
         if decision == "approved":
             return back(f"/articles/{article_id}", msg=f"{label}しました。下書きを作れます")
         return back(f"/articles/{nxt}" if nxt else "/articles", msg=f"{label}しました")
+
+    @app.post("/articles/{article_id}/hero")
+    def choose_hero(article_id: int, url: str = Form(...)):
+        """1枚目（外観）を人が選び直す。自動で選んだものが外れていたとき用。"""
+        with db() as conn:
+            row = repo.get_article(conn, article_id)
+            if row is None or url not in json.loads(row["image_urls"] or "[]"):
+                return back(f"/articles/{article_id}", err="その写真はこの記事にありません")
+            set_hero(conn, article_id, url)
+            conn.commit()
+        return back(f"/articles/{article_id}", msg="1枚目を変えました")
 
     @app.post("/articles/{article_id}/reset")
     def reset(article_id: int):

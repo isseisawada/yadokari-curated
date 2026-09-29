@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block sub %}
 <div class="sub" style="display:block;padding:40px 20px 36px">
-  <span class="label">{{ a['source'] }}</span>
+  <span class="label" style="{{ a['source']|source_style }}">{{ a['source'] }}</span>
   {% if a['status'] == 'approved' %}<span class="label gray">承認済み</span>{% elif a['status'] == 'rejected' %}<span class="label red">非承認</span>{% endif %}
   <h2>{{ a['title'] }}</h2>
   {% if assessment %}<div>{% for t in assessment['suggested_tags'] %}<span class="tag">#{{ t }}</span>{% endfor %}</div>{% endif %}
@@ -10,7 +10,13 @@
 </div>
 {% endblock %}
 {% block body %}
-<div class="gallery">{% for u in images[:12] %}<img src="{{ u }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endfor %}</div>
+<div class="gallery">{% for u in images[:12] %}
+  <figure class="{{ 'hero' if loop.first }}">
+    <img src="{{ u }}" alt="" loading="lazy" referrerpolicy="no-referrer">
+    {% if loop.first %}<span class="tag1">1枚目{{ '（外観）' if a['hero_image'] == u }}</span>
+    {% else %}<form method="post" action="/articles/{{ a['id'] }}/hero"><input type="hidden" name="url" value="{{ u }}"><button>1枚目にする</button></form>{% endif %}
+  </figure>
+{% endfor %}</div>
 <p class="muted">写真 {{ images|length }} 枚{% if a['photo_credit'] %} ・ クレジット: {{ a['photo_credit'] }}{% endif %}</p>
 
 <div class="grid2">

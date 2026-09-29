@@ -23,8 +23,11 @@ collect:
 # 利用規約の確認（2026-09-28・docs/source-survey.md）。
 # **ArchDaily・Dwell・Gessato は規約で自動収集を禁じているが、ユーザー判断で自動収集する
 # （2026-09-29）。** robots.txt・3秒間隔・UA の連絡先・回避をしない、は変えない。
+# color は審査画面の媒体ラベルの色。各サイトの雰囲気に寄せた目安（公式のブランド色ではない）。
+# 承認の青・非承認の赤とは被らないようにしてある
 sources:
   - name: archdaily
+    color: "#F08C1E"
     # 利用規約: "use an automatic device (such as a robot or spider) or manual process to copy
     # or scrape the Website ... without the express written permission of ArchDaily" を禁止
     # サイト全体のフィードは窓が1.4日しかない。cabins-and-lodges の一覧を入口にする
@@ -33,35 +36,45 @@ sources:
     lookback_days: 365           # 一覧に少し前の作品も並ぶ（30日だと24件中15件が落ちた）
     note: "規約で自動収集禁止。ユーザー判断で収集（2026-09-29）"
   - name: dwell
+    color: "#2B2B2B"
     # 利用規約（Ziff Davis）: "use any robot, spider ... to crawl, scrape ... harvest, gather,
     # extract, retrieve or index any portion of the Services" を禁止
     feed: "https://www.dwell.com/@dwell/rss"
     prefilter: true              # 住宅全般のフィードなので絞る
     note: "規約で自動収集禁止。ユーザー判断で収集（2026-09-29）"
   - name: tinyhousetalk
+    color: "#4E8A2E"
     feed: "https://tinyhousetalk.com/feed/"
   - name: newatlas
+    color: "#0086A8"
     feed: "https://newatlas.com/tiny-houses/index.rss"
   - name: designboom
+    color: "#8B1E3F"
     feed: "https://www.designboom.com/tag/cabin/feed/"
   - name: leibal
+    color: "#B5AFA4"
     feed: "https://leibal.com/feed/"
     prefilter: true              # 家具・プロダクトも混ざる
   - name: dezeen
+    color: "#000000"
     feed: "https://www.dezeen.com/tag/cabins/feed/"
     fetch_article: false         # 記事ページはデータセンターから 403。フィードが全文
   - name: dezeen-micro
+    color: "#000000"
     feed: "https://www.dezeen.com/tag/micro-homes/feed/"
     fetch_article: false
   - name: tinyhouseblog
+    color: "#8B5A2B"
     feed: "https://tinyhouseblog.com/feed/"
   - name: gessato
+    color: "#6D4C8D"
     # 利用規約: "prohibited from using any data mining, robots, or other data gathering
     # systems and extraction tools" を禁止
     feed: "https://www.gessato.com/feed/"
     prefilter: true
     note: "規約で自動収集禁止。ユーザー判断で収集（2026-09-29）"
   - name: manual
+    color: "#9B9B9B"
     # 上のどれにも当たらない媒体・ビルダーの自社サイトを人が入れるとき
     manual_only: true
 
