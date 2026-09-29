@@ -1,0 +1,8 @@
+{
+  "regions": ["hnd1"],
+  "functions": {
+    "app.py": {
+      "maxDuration": 300
+    }
+  }
+}

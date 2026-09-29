@@ -24,8 +24,13 @@ def setup_logging(log_dir: str | Path = "logs", level: str = "INFO") -> Path:
     """
     global _configured
     log_dir = Path(log_dir)
-    log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"yadokari-{date.today().isoformat()}.log"
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        writable = True
+    except OSError:
+        # Vercel などファイルに書けない場所では標準出力だけに出す（ホスティング側がログを拾う）
+        writable = False
 
     root = logging.getLogger()
     if _configured:
@@ -34,9 +39,10 @@ def setup_logging(log_dir: str | Path = "logs", level: str = "INFO") -> Path:
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
     formatter = logging.Formatter(_FORMAT, datefmt=_DATEFMT)
 
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
-    file_handler.setFormatter(formatter)
-    root.addHandler(file_handler)
+    if writable:
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
 
     console = logging.StreamHandler(stream=sys.stderr)
     console.setFormatter(formatter)
