@@ -17,6 +17,9 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "jinja2>=3.1",
     "python-multipart>=0.0.9",
+    # 本番の DB（Supabase）。Vercel は requirements.txt より pyproject.toml を優先して
+    # dependencies だけを入れるので、extras ではなくここに置く
+    "psycopg[binary]>=3.1",
 ]
 
 [project.optional-dependencies]
