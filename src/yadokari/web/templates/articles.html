@@ -13,28 +13,74 @@
 </div>
 {% endblock %}
 {% block body %}
+{% set here = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}
 <div class="cards">
 {% for r in rows %}
   {% set a = r['assessment']|fromjson %}
-  <a class="card" href="/articles/{{ r['id'] }}">
-    <div class="ph">
-      {% if r['og_image'] %}<img src="{{ r['og_image'] }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endif %}
-      {% if r['score'] is not none %}<span class="score {{ 'low' if r['score'] < threshold }}">{{ '%.0f'|format(r['score']) }}</span>{% endif %}
+  {% set thumb = r['hero_image'] or r['og_image'] %}
+  <div class="card" id="card-{{ r['id'] }}">
+    <a class="card-link" href="/articles/{{ r['id'] }}">
+      <div class="ph">
+        {% if thumb %}<img src="{{ thumb }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+        {% if r['score'] is not none %}<span class="score {{ 'low' if r['score'] < threshold }}">{{ '%.0f'|format(r['score']) }}</span>{% endif %}
+      </div>
+      <div class="meta">
+        <span class="label" style="{{ r['source']|source_style }}">{{ r['source'] }}</span>
+        <span class="date">{{ (r['published_at'] or r['collected_at'])|local('%Y.%m.%d') }}</span>
+        <span class="muted">写真{{ r['image_count'] }}枚</span>
+      </div>
+      <h3>{{ r['title'] or r['source_url'] }}</h3>
+      {% if a %}
+        {% if not a['relevant'] %}<p class="warn">対象外: {{ a['relevant_reason'] }}</p>{% endif %}
+        <p>{{ a['summary_ja'] }}</p>
+      {% endif %}
+      {% if r['score_error'] %}<p class="warn">採点に失敗しました</p>{% endif %}
+    </a>
+    {% if r['status'] == 'scored' %}
+    <div class="quick">
+      <form method="post" action="/articles/{{ r['id'] }}/decide" class="js-decide">
+        <input type="hidden" name="decision" value="approved">
+        <input type="hidden" name="next" value="{{ here }}">
+        <button class="approve small">承認</button>
+      </form>
+      <details class="rej">
+        <summary class="btn small">非承認…</summary>
+        <form method="post" action="/articles/{{ r['id'] }}/decide" class="js-decide">
+          <input type="hidden" name="decision" value="rejected">
+          <input type="hidden" name="next" value="{{ here }}">
+          <select name="tag" required><option value="">理由を選ぶ（必須）</option>{% for t in tags %}<option>{{ t }}</option>{% endfor %}</select>
+          <input type="text" name="reason" placeholder="ひとこと（任意）">
+          <button class="reject small">非承認にする</button>
+        </form>
+      </details>
+      <p class="quick-msg muted" hidden></p>
     </div>
-    <div class="meta">
-      <span class="label">{{ r['source'] }}</span>
-      <span class="date">{{ (r['published_at'] or r['collected_at'])|local('%Y.%m.%d') }}</span>
-      <span class="muted">写真{{ r['image_count'] }}枚</span>
-    </div>
-    <h3>{{ r['title'] or r['source_url'] }}</h3>
-    {% if a %}
-      {% if not a['relevant'] %}<p class="warn">対象外: {{ a['relevant_reason'] }}</p>{% endif %}
-      <p>{{ a['summary_ja'] }}</p>
     {% endif %}
-    {% if r['score_error'] %}<p class="warn">採点に失敗しました</p>{% endif %}
-  </a>
+  </div>
 {% else %}
   <p class="muted">ありません。</p>
 {% endfor %}
 </div>
+<script>
+// 一覧から承認・非承認したとき、ページを読み直さずにカードだけ消す（JS が無ければ普通に送って一覧に戻る）
+document.querySelectorAll("form.js-decide").forEach(function (form) {
+  form.addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var card = form.closest(".card"), msg = card.querySelector(".quick-msg");
+    card.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
+    fetch(form.action, { method: "POST", body: new FormData(form), headers: { "X-Requested-With": "fetch" } })
+      .then(function (res) { return res.json().then(function (j) { return [res.ok, j]; }); })
+      .then(function (r) {
+        if (!r[0] || !r[1].ok) { throw new Error((r[1] && r[1].error) || "送れませんでした"); }
+        card.classList.add("done");
+        msg.hidden = false; msg.classList.remove("warn"); msg.textContent = r[1].message;
+        setTimeout(function () { card.remove(); }, 900);
+      })
+      .catch(function (e) {
+        msg.hidden = false; msg.textContent = e.message; msg.classList.add("warn");
+        card.querySelectorAll("button").forEach(function (b) { b.disabled = false; });
+      });
+  });
+});
+</script>
 {% endblock %}

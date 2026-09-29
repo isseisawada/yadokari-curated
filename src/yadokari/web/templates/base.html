@@ -55,6 +55,23 @@
   h3.sec { font-size:18px; font-weight:800; margin:36px 0 12px; padding-bottom:8px; border-bottom:2px solid var(--ink); }
   .gallery { display:flex; gap:8px; overflow-x:auto; padding:4px 0 12px; }
   .gallery img { height:180px; }
+  .gallery figure { margin:0; position:relative; flex:none; min-width:140px; min-height:180px; background:var(--band); }
+  .gallery figure .tag1, .gallery figure form button { white-space:nowrap; }
+  .gallery figure.hero img { height:260px; }
+  .gallery figure .tag1 { position:absolute; left:0; top:0; background:#000; color:#fff; font-size:12px; font-weight:700; padding:2px 8px; }
+  .gallery figure form { position:absolute; left:6px; bottom:6px; margin:0; }
+  .gallery figure form button { font-size:11px; padding:2px 10px; background:rgba(255,255,255,.9); }
+  .card-link { text-decoration:none; color:inherit; display:block; }
+  .card.done { opacity:.3; transition:opacity .3s; }
+  .quick { margin-top:12px; display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; }
+  .quick form { margin:0; }
+  .btn.small, button.small { font-size:13px; padding:5px 18px; }
+  .quick details.rej { flex:1 1 auto; }
+  .quick details.rej summary { list-style:none; cursor:pointer; }
+  .quick details.rej summary::-webkit-details-marker { display:none; }
+  .quick details.rej[open] form { margin-top:8px; display:grid; gap:6px; }
+  .quick details.rej select, .quick details.rej input { font-size:13px; padding:6px 8px; }
+  .quick-msg { flex-basis:100%; margin:0; }
   .btn, button { font:700 15px "Inter","Noto Sans JP",sans-serif; padding:10px 28px; border:1px solid var(--ink); background:#fff; color:var(--ink); border-radius:50px; cursor:pointer; text-decoration:none; display:inline-block; }
   button:hover { background:var(--band); }
   button.approve { background:var(--blue); border-color:var(--blue); color:#fff; }
