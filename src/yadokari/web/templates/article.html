@@ -10,6 +10,11 @@
 </div>
 {% endblock %}
 {% block body %}
+{% if original %}
+<div class="error">別の媒体で同じ作品を紹介しています → <a href="/articles/{{ original['id'] }}"><b>#{{ original['id'] }} {{ original['source'] }}「{{ original['title'] }}」</b></a>（{{ original['status'] }}）。審査待ちの一覧からは外しています。
+  <form method="post" action="/articles/{{ a['id'] }}/not-duplicate" style="display:inline;margin-left:12px"><button class="small">重複ではない</button></form>
+</div>
+{% endif %}
 <div class="gallery">{% for u in images[:12] %}
   <figure class="{{ 'hero' if loop.first }}">
     <img src="{{ u }}" alt="" loading="lazy" referrerpolicy="no-referrer">

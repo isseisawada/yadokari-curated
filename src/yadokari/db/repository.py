@@ -73,10 +73,16 @@ def save_score_error(conn: DbConnection, article_id: int, error: str) -> None:
 
 
 def list_articles(
-    conn: DbConnection, status: str | None = None, min_score: float | None = None, limit: int = 50
+    conn: DbConnection, status: str | None = None, min_score: float | None = None, limit: int = 50,
+    duplicates: bool | None = None,
 ) -> list[Row]:
+    """duplicates: None=区別しない / False=重複を除く / True=重複だけ（duplicate_of が 0 は「重複ではない」）"""
     sql = "SELECT * FROM articles WHERE 1=1"
     params: list = []
+    if duplicates is False:
+        sql += " AND (duplicate_of IS NULL OR duplicate_of = 0)"
+    elif duplicates is True:
+        sql += " AND duplicate_of > 0"
     if status:
         sql += " AND status = ?"
         params.append(status)

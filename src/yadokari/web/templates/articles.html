@@ -9,6 +9,7 @@
     <a href="/articles?status=approved" class="{{ 'on' if status == 'approved' }}">承認 {{ counts.get('approved', 0) }}</a>
     <a href="/articles?status=rejected" class="{{ 'on' if status == 'rejected' }}">非承認 {{ counts.get('rejected', 0) }}</a>
     <a href="/articles?status=collected" class="{{ 'on' if status == 'collected' }}">未採点 {{ counts.get('collected', 0) }}</a>
+    <a href="/articles?status=duplicate" class="{{ 'on' if status == 'duplicate' }}">重複 {{ counts.get('duplicate', 0) }}</a>
   </div>
 </div>
 {% endblock %}
@@ -29,6 +30,7 @@
         <span class="date">{{ (r['published_at'] or r['collected_at'])|local('%Y.%m.%d') }}</span>
         <span class="muted">写真{{ r['image_count'] }}枚</span>
       </div>
+      {% if r['duplicate_of'] %}<p class="warn">重複: #{{ r['duplicate_of'] }} と同じ作品</p>{% endif %}
       <h3>{{ r['title'] or r['source_url'] }}</h3>
       {% if a %}
         {% if not a['relevant'] %}<p class="warn">対象外: {{ a['relevant_reason'] }}</p>{% endif %}
@@ -36,7 +38,7 @@
       {% endif %}
       {% if r['score_error'] %}<p class="warn">採点に失敗しました</p>{% endif %}
     </a>
-    {% if r['status'] == 'scored' %}
+    {% if r['status'] == 'scored' and not r['duplicate_of'] %}
     <div class="quick">
       <form method="post" action="/articles/{{ r['id'] }}/decide" class="js-decide">
         <input type="hidden" name="decision" value="approved">

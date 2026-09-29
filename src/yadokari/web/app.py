@@ -124,9 +124,16 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
     def articles(request: Request, status: str = "scored", all: int = 0):
         min_score = None if all or status != "scored" else config.scoring.review_threshold
         with db() as conn:
-            rows = repo.list_articles(conn, status=status or None, min_score=min_score, limit=200)
+            if status == "duplicate":
+                rows = repo.list_articles(conn, status=None, duplicates=True, limit=200)
+            else:
+                # 審査待ちからは、別の媒体で同じ作品を紹介している記事（重複）を外す
+                rows = repo.list_articles(conn, status=status or None, min_score=min_score, limit=200,
+                                          duplicates=False if status == "scored" else None)
             counts = {r["status"]: r["n"] for r in conn.execute(
                 "SELECT status, COUNT(*) AS n FROM articles GROUP BY status").fetchall()}
+            counts["duplicate"] = conn.execute(
+                "SELECT COUNT(*) AS n FROM articles WHERE duplicate_of > 0").fetchone()["n"]
         return render(request, "articles.html", rows=rows, status=status, all=all, counts=counts,
                       threshold=config.scoring.review_threshold, tags=config.learning.tags)
 
@@ -137,11 +144,13 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
             if row is None:
                 return HTMLResponse("見つかりません", status_code=404)
             draft = repo.get_draft_by_article(conn, article_id)
+            original = (repo.get_article(conn, row["duplicate_of"])
+                        if row["duplicate_of"] else None)
             feedback = conn.execute(
                 "SELECT * FROM feedback WHERE article_id = ? ORDER BY id DESC", (article_id,)
             ).fetchall()
         return render(
-            request, "article.html", a=row, draft=draft, feedback=feedback,
+            request, "article.html", a=row, draft=draft, feedback=feedback, original=original,
             assessment=json.loads(row["assessment"]) if row["assessment"] else None,
             detail=json.loads(row["score_detail"]) if row["score_detail"] else None,
             images=ordered_images(row),
@@ -150,7 +159,7 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
 
     def _next_unreviewed(conn, after_id: int) -> int | None:
         rows = repo.list_articles(conn, status="scored", min_score=config.scoring.review_threshold,
-                                  limit=50)
+                                  limit=50, duplicates=False)
         for r in rows:
             if r["id"] != after_id:
                 return r["id"]
@@ -198,6 +207,14 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
             set_hero(conn, article_id, url)
             conn.commit()
         return back(f"/articles/{article_id}", msg="1枚目を変えました")
+
+    @app.post("/articles/{article_id}/not-duplicate")
+    def not_duplicate(article_id: int):
+        """重複の判定が外れていたとき。0 は「人が見て重複ではない」の印（自動で付け直さない）。"""
+        with db() as conn:
+            conn.execute("UPDATE articles SET duplicate_of = 0 WHERE id = ?", (article_id,))
+            conn.commit()
+        return back(f"/articles/{article_id}", msg="重複ではないとして審査待ちに戻しました")
 
     @app.post("/articles/{article_id}/reset")
     def reset(article_id: int):

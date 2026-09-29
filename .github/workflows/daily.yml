@@ -45,6 +45,9 @@ jobs:
       - name: 採点
         if: steps.check.outputs.ready == 'true' && env.ANTHROPIC_API_KEY != ''
         run: python -m yadokari.cli score --limit 60
+      - name: 重複（別の媒体で同じ作品）
+        if: steps.check.outputs.ready == 'true'
+        run: python -m yadokari.cli dedupe
       - name: 1枚目（外観）を選ぶ
         if: steps.check.outputs.ready == 'true' && env.ANTHROPIC_API_KEY != ''
         run: python -m yadokari.cli hero --limit 60
