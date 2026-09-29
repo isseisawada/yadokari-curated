@@ -9,6 +9,7 @@ from yadokari.db.connection import DbConnection
 from yadokari.db.repository import approved_rules, save_score, save_score_error, unscored
 from yadokari.logging_setup import get_logger
 from yadokari.scoring.client import ScoringClient, ScoringError
+from yadokari.scoring.dedupe import mark_duplicates
 from yadokari.scoring.prompt import SYSTEM_PROMPT, build_user_prompt
 from yadokari.scoring.weights import build_axes, total
 
@@ -54,6 +55,10 @@ def score_pending(
         save_score(conn, row["id"], total(axes, a), detail, a.to_dict(), client.model)
         conn.commit()
         stats.scored += 1
+    # 別の媒体で同じ作品を紹介しているものに印を付ける（審査待ちの一覧から外す）
+    if stats.scored:
+        mark_duplicates(conn)
+        conn.commit()
     return stats
 
 

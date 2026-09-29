@@ -70,3 +70,13 @@ python -m yadokari.cli validate report
 - 落ちた1本は「Morinest 北軽井沢」（国内のトレーラーハウスホテル）。「海外事例ではない」で0点
   → **国内の施設も対象**にプロンプトを直した
 - 載せたくない見本がまだ無く、AUC は未計測
+
+## 審査を受けた追加（2026-09-29）
+
+- **重複**: 別の媒体で同じ作品を紹介している記事（ArchDaily と designboom の Wiki World
+  「Red Submarine Cabin」）が二重に審査に出た。採点で抜き出した物件名・設計者とタイトルの言葉から
+  後から入った方に `duplicate_of` を付け、審査待ちから外す（`scoring/dedupe.py`、LLM は使わない）。
+  外れていたら審査画面の「重複ではない」で戻す
+- **量産型のトレーラーハウスを下げる**: 非承認の理由「よくある車検なしトレーラーなのでNG」から。
+  ユーザーの指示で、学習ループ（同じ理由3回）を待たずに承認済みのルールとして入れた
+  （rule_candidates の reason_tag `mass_produced_trailer`、審査画面の RULES で直せる）

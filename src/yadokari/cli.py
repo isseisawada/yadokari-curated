@@ -4,6 +4,7 @@
     python -m yadokari.cli collect [--source archdaily] [--limit 5] [--dry-run]
     python -m yadokari.cli score [--limit 40]
     python -m yadokari.cli hero [--limit 60]
+    python -m yadokari.cli dedupe
     python -m yadokari.cli list [--status scored] [--min-score 50]
     python -m yadokari.cli stats
     python -m yadokari.cli serve [--host 127.0.0.1] [--port 8000]
@@ -81,6 +82,20 @@ def _cmd_hero(cfg, args) -> int:
         conn.close()
     # 画像を取れずに選べなかったものは元の並びのまま使えるので、失敗でもジョブは止めない
     print(f"1枚目（外観）を選んだ {picked} 件（選べなかった {failed} 件）")
+    return 0
+
+
+def _cmd_dedupe(cfg, args) -> int:
+    from yadokari.scoring.dedupe import mark_duplicates
+
+    ensure_migrated(cfg.app.target())
+    conn = connect(cfg.app.target())
+    try:
+        n = mark_duplicates(conn)
+        conn.commit()
+    finally:
+        conn.close()
+    print(f"重複（別の媒体で同じ作品）に印を付けた {n} 件")
     return 0
 
 
@@ -255,6 +270,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("hero", help="審査ライン以上の記事で、1枚目に使う外観の写真を選ぶ")
     p.add_argument("--limit", type=int, default=60)
     p.set_defaults(func=_cmd_hero)
+
+    p = sub.add_parser("dedupe", help="別の媒体で同じ作品を紹介している記事に印を付ける")
+    p.set_defaults(func=_cmd_dedupe)
 
     p = sub.add_parser("list", help="記事の一覧")
     p.add_argument("--status")
