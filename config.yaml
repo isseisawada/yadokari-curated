@@ -79,9 +79,13 @@ sources:
     manual_only: true
 
 scoring:
-  model: claude-opus-5-5
-  effort: low
-  max_tokens: 16000
+  # 採点はざっくりでよい（2026-09-29 ユーザー判断: 課金を下げたい）。いちばん安い Haiku 4.5
+  # （Opus 5.5 の約1/4の単価）。Haiku は effort を受け付けない（送ると 400）ので null。
+  # server-side fallback も Haiku では使わない
+  model: claude-haiku-4-5
+  effort: null
+  fallbacks: false
+  max_tokens: 4000
   review_threshold: 50
   # 軸の案（docs/scoring.md）。承認実績が溜まったら見直す。合計 1.0
   weights:

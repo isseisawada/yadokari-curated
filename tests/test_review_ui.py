@@ -89,9 +89,9 @@ def test_pick_exterior_moves_it_to_the_front(config, db):
     row = db.execute("SELECT * FROM articles WHERE id = ?", (aid,)).fetchone()
     assert row["hero_image"] == "https://img.example.com/3.jpg"
     assert ordered_images(row)[:2] == ["https://img.example.com/3.jpg", "https://img.example.com/0.jpg"]
-    # 写真は URL のまま渡す（こちらからは取りに行かない）。8枚まで
+    # 写真は URL のまま渡す（こちらからは取りに行かない）。5枚まで
     images = [b for b in llm.calls[0]["messages"][0]["content"] if b["type"] == "image"]
-    assert len(images) == 8 and images[0]["source"]["type"] == "url"
+    assert len(images) == 5 and images[0]["source"]["type"] == "url"
     # 一度選んだものは選び直さない
     assert pick_pending(config, db, client=_hero_llm(0)) == (0, 0)
 
