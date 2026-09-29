@@ -43,7 +43,9 @@ _NOISE_TOKENS = re.compile(
 # 画像のURLにこれが入っていたら写真ではない
 _IMAGE_NOISE = re.compile(
     r"(logo|icon|avatar|sprite|badge|banner|advert|placeholder|favicon|"
-    r"share|social|1x1|spacer|pixel|gravatar)",
+    r"share|social|1x1|spacer|pixel|gravatar|"
+    # WordPress の切り抜き（サイトのロゴやショップの商品。designboom で記事と関係ない写真が混ざった）
+    r"/cropped-)",
     re.IGNORECASE,
 )
 _IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp")
@@ -130,21 +132,52 @@ def _body_text(root) -> str:
 
 
 def _img_src(img, base_url: str) -> str | None:
-    """遅延読み込み（data-src / srcset）にも対応する。srcset は一番大きいものを取る。"""
-    for attr in ("data-src", "data-lazy-src", "data-original", "src"):
-        value = (img.get(attr) or "").strip()
-        if value and not value.startswith("data:"):
-            return urljoin(base_url, value)
-    srcset = img.get("srcset") or img.get("data-srcset") or ""
+    """遅延読み込み（data-src / srcset）にも対応する。
+
+    srcset があれば一番大きいものを先に取る（src は縮小版のことが多い）。最後に縮小版の URL を
+    大きい版に直す（upgrade_image_url）。
+    """
+    srcset = img.get("data-srcset") or img.get("srcset") or ""
     best, best_w = None, -1
     for part in srcset.split(","):
         bits = part.strip().split()
-        if not bits:
+        if not bits or bits[0].startswith("data:"):
             continue
         width = int(bits[1][:-1]) if len(bits) > 1 and bits[1].endswith("w") and bits[1][:-1].isdigit() else 0
         if width > best_w:
             best, best_w = bits[0], width
-    return urljoin(base_url, best) if best else None
+    if best:
+        return upgrade_image_url(urljoin(base_url, best))
+    for attr in ("data-src", "data-lazy-src", "data-original", "src"):
+        value = (img.get(attr) or "").strip()
+        if value and not value.startswith("data:"):
+            return upgrade_image_url(urljoin(base_url, value))
+    return None
+
+
+# 縮小版の URL を元の大きさに戻す（2026-09-29: Dwell が「幅160px・画質35%」の縮小版で、
+# 審査画面で荒く見えた）。写真は直リンクで使うので、大きい版を指す URL にしておく
+_WP_RESIZED = re.compile(r"-(\d{2,4})x(\d{2,4})(?=\.[a-z]{3,4}$)", re.I)
+_QS_WIDTH = re.compile(r"([?&](?:w|width))=(\d+)", re.I)
+_QS_QUALITY = re.compile(r"([?&](?:q|quality))=(\d+)", re.I)
+MIN_WIDTH = 1200
+
+
+def upgrade_image_url(url: str) -> str:
+    parsed = urlparse(url)
+    path = parsed.path
+    # WordPress のリサイズ版（-818x545.jpg）→ 元画像（WordPress は元画像を必ず残す）
+    m = _WP_RESIZED.search(path)
+    if m and max(int(m.group(1)), int(m.group(2))) < MIN_WIDTH:
+        path = _WP_RESIZED.sub("", path)
+    # Dwell の thumbnail.jpg → large.jpg
+    if "dwell.com" in parsed.netloc and path.endswith("/thumbnail.jpg"):
+        path = path[: -len("thumbnail.jpg")] + "large.jpg"
+    query = parsed.query
+    if query:
+        query = _QS_WIDTH.sub(lambda m: f"{m.group(1)}={max(int(m.group(2)), 1600)}", "?" + query)[1:]
+        query = _QS_QUALITY.sub(lambda m: f"{m.group(1)}={max(int(m.group(2)), 80)}", "?" + query)[1:]
+    return parsed._replace(path=path, query=query).geturl()
 
 
 def _image_key(url: str) -> str:
@@ -230,7 +263,7 @@ def parse_page(html: str, base_url: str) -> Page:
     og_image = None
     og = soup.find("meta", property="og:image")
     if og and og.get("content"):
-        og_image = urljoin(base_url, og["content"].strip())
+        og_image = upgrade_image_url(urljoin(base_url, og["content"].strip()))
 
     published = None
     meta_time = soup.find("meta", property="article:published_time")
