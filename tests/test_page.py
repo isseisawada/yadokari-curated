@@ -26,7 +26,8 @@ def test_images_in_order_and_deduped_across_sizes():
         + "<img src='/wp/cabin-1.jpg'><img data-src='/wp/cabin-2.jpg' src='data:image/gif;base64,xx'>"
     )
     page = parse_page(html, "https://a.com/post")
-    assert page.images == ["https://a.com/wp/cabin-1-1024x683.jpg", "https://a.com/wp/cabin-2.jpg"]
+    # リサイズ版は元画像に直す（2026-09-29: 縮小版で荒く見えた）
+    assert page.images == ["https://a.com/wp/cabin-1.jpg", "https://a.com/wp/cabin-2.jpg"]
 
 
 def test_navigation_logos_and_tiny_images_are_not_photos():
@@ -82,3 +83,29 @@ def test_feed_fragment_is_parsed_like_a_page():
     page = parse_fragment(f"<img src='https://static.dezeen.com/a.jpg'>{BODY}", "https://www.dezeen.com/x")
     assert page.images == ["https://static.dezeen.com/a.jpg"]
     assert "small cabin" in page.text
+
+
+def test_small_versions_are_upgraded_to_large():
+    """2026-09-29: Dwell が幅160px・画質35%の縮小版で、審査画面で荒く見えた。"""
+    from yadokari.collect.page import upgrade_image_url
+
+    assert upgrade_image_url(
+        "https://images2.dwell.com/photos/1/2/original.jpg?auto=format&q=35&w=160"
+    ) == "https://images2.dwell.com/photos/1/2/original.jpg?auto=format&q=80&w=1600"
+    assert upgrade_image_url("https://images.dwell.com/photos/1/2/thumbnail.jpg") == \
+        "https://images.dwell.com/photos/1/2/large.jpg"
+    assert upgrade_image_url("https://x.com/wp/cabin-4-2-818x545.jpg") == "https://x.com/wp/cabin-4-2.jpg"
+    # 十分大きいものはそのまま
+    assert upgrade_image_url("https://x.com/wp/cabin-2400x1600.jpg") == "https://x.com/wp/cabin-2400x1600.jpg"
+    assert upgrade_image_url("https://x.com/a.jpg?w=2400&q=90") == "https://x.com/a.jpg?w=2400&q=90"
+
+
+def test_srcset_largest_wins_over_small_src():
+    html = _html(BODY + "<img src='/wp/c-300x200.jpg' srcset='/wp/c-300x200.jpg 300w, /wp/c-2048x1365.jpg 2048w'>")
+    assert parse_page(html, "https://a.com/post").images == ["https://a.com/wp/c-2048x1365.jpg"]
+
+
+def test_wordpress_cropped_images_are_not_photos():
+    """designboom でショップの商品画像（cropped-...-500x400.jpg）が混ざった。"""
+    html = _html(BODY + "<img src='/wp/cropped-IMG_7013-500x400.jpg'><img src='/wp/cabin.jpg'>")
+    assert parse_page(html, "https://a.com/post").images == ["https://a.com/wp/cabin.jpg"]
