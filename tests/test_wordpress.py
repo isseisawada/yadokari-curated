@@ -143,10 +143,11 @@ def test_sync_marks_published_and_reports_missed_schedules(config, db):
 
 
 def test_next_free_slot_skips_taken_and_too_soon(config):
-    now = datetime(2026, 10, 1, 9, 45, tzinfo=UTC)  # JST 18:45（19:00 まで15分）
+    assert config.wordpress.post_times == ["08:00"]  # 毎日 AM8時（2026-09-30 ユーザー指定）
+    now = datetime(2026, 9, 30, 22, 45, tzinfo=UTC)  # JST 10/1 07:45（08:00 まで15分）
     first = next_free_slot(config, set(), now)
-    assert first == datetime(2026, 10, 2, 10, 0, tzinfo=UTC)  # 翌日の 19:00 JST
-    assert next_free_slot(config, {first.isoformat()}, now) == datetime(2026, 10, 3, 10, 0, tzinfo=UTC)
+    assert first == datetime(2026, 10, 1, 23, 0, tzinfo=UTC)  # 翌日 10/2 の 08:00 JST
+    assert next_free_slot(config, {first.isoformat()}, now) == datetime(2026, 10, 2, 23, 0, tzinfo=UTC)
 
 
 def test_more_post_times_means_more_posts_per_day(config):
