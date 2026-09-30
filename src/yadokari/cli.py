@@ -160,6 +160,15 @@ def _wp_check(cfg) -> int:
     from yadokari.wordpress.client import WordPressClient, WordPressError
 
     ok = True
+    # 値は出さずに形だけ見る（アプリケーションパスワードは空白を除いて英数字24文字）
+    user, password = cfg.wordpress.require_credentials()
+    core = "".join(ch for ch in password if ch.isalnum())
+    print(f"WP_USER: {len(user)}文字{'（メールアドレス形式）' if '@' in user else ''}"
+          f"{' 前後に空白あり' if user != user.strip() else ''}")
+    quoted = any(q in password for q in ('"', "'"))
+    print(f"WP_APP_PASSWORD: 英数字{len(core)}文字（24文字のはず）"
+          f"{' 前後に空白・改行あり' if password != password.strip() else ''}"
+          f"{' 引用符あり' if quoted else ''}")
     try:
         with WordPressClient(cfg.wordpress) as wp:
             me = wp.me()
