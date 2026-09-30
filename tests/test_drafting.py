@@ -120,3 +120,28 @@ def test_related_links_are_trailer_cabin_tiny_in_that_order(config, db):
     names = [n for n in ("トレーラーハウス", "小屋", "タイニーハウス") if f"{n}の記事一覧" in related]
     assert names == ["トレーラーハウス", "小屋", "タイニーハウス"]
     assert related.index("トレーラーハウス") < related.index("小屋") < related.index("タイニーハウスの記事一覧")
+
+
+def test_long_description_is_rewritten_by_the_cheap_model(config, db):
+    """説明文が120字を超えたら、その欄だけ採点用の安いモデルで書き直す（2026-09-30）。"""
+    long = draft_json()
+    long["description"] = long["description"] + "窓辺で過ごす時間を大切にしたい人に向けた、小さく豊かな住まいのかたち。" * 2
+    assert len(long["description"]) > config.seo.description_max
+    short = {"description": draft_json()["description"]}
+    llm = FakeLLM(long, short)
+    article_id = add_article(db, status="approved")
+    d = get_draft(db, generate_for(config, db, article_id, client=llm))
+    assert d["excerpt"] == short["description"]
+    assert llm.calls[1]["model"] == config.scoring.model
+    assert not any("meta description" in w for w in json.loads(d["warnings"]))
+
+
+def test_description_rewrite_with_new_numbers_is_ignored(config, db):
+    long = draft_json()
+    long["description"] = long["description"] + "窓辺で過ごす時間を大切にしたい人に向けた、小さく豊かな住まいのかたち。" * 2
+    bad = {"description": "価格は999万円。" + draft_json()["description"]}
+    llm = FakeLLM(long, bad, bad)
+    article_id = add_article(db, status="approved")
+    d = get_draft(db, generate_for(config, db, article_id, client=llm))
+    assert d["excerpt"] == long["description"]
+    assert len(llm.calls) == 3

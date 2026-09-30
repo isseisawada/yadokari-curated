@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+import anthropic
+
 from yadokari.config import Config
 from yadokari.db.connection import DbConnection, Row
 from yadokari.db.repository import get_article, save_draft
@@ -22,7 +24,7 @@ from yadokari.drafting.render import (
     excerpt_of,
 )
 from yadokari.drafting.seo import checks, failed
-from yadokari.llm import call_json, make_client
+from yadokari.llm import LLMError, call_json, make_client
 from yadokari.logging_setup import get_logger
 from yadokari.scoring.hero import ordered_images
 
@@ -59,6 +61,53 @@ def checked_facts(facts: dict[str, str], check_source: str) -> tuple[dict[str, s
             continue
         ok[key] = value
     return ok, dropped
+
+
+DESCRIPTION_SCHEMA = {
+    "type": "object",
+    "properties": {"description": {"type": "string"}},
+    "required": ["description"],
+    "additionalProperties": False,
+}
+
+
+def fix_description(config: Config, client, parts: DraftParts, keyword: str,
+                    check_source: str) -> DraftParts:
+    """説明文が決まった字数に収まらなければ、その欄だけ安いモデル（採点と同じ）で書き直させる。
+
+    2026-09-30 ユーザー指定（自動で直す）。2回まで。直らなければ元のまま（審査画面に ✕ が出る）。
+    元記事に無い数字が入った書き直しは使わない。
+    """
+    lo, hi = config.seo.description_min, config.seo.description_max
+    s = config.scoring
+    for _ in range(2):
+        n = len(parts.description)
+        if n == 0:
+            break
+        if lo <= n <= hi:
+            break
+        target = hi - 10 if n > hi else lo + 10
+        prompt = (
+            f"次の説明文（検索結果に出る meta description）は{n}字です。"
+            f"{lo}〜{hi}字（目安{target}字）に書き直してください。"
+            f"物件名と「{keyword}」は残し、意味は変えず、新しい事実や数字は足さないこと。\n\n"
+            f"{parts.description}"
+        )
+        try:
+            data, _ = call_json(
+                client, model=s.model, system="日本語の編集者として、指示どおりの字数に整える。",
+                messages=[{"role": "user", "content": prompt}], schema=DESCRIPTION_SCHEMA,
+                max_tokens=1000, effort=s.effort, fallbacks=s.fallbacks,
+            )
+        except (LLMError, anthropic.APIError) as exc:  # 説明文の手直しで下書き全体を落とさない
+            log.warning("説明文の書き直しに失敗しました: %s", exc)
+            break
+        new = str(data.get("description") or "").replace("\n", "").strip()
+        if not new or unsupported_numbers(new, check_source):
+            continue
+        if abs(len(new) - target) < abs(n - target):
+            parts.description = new
+    return parts
 
 
 def generate(config: Config, row: Row, client=None) -> Draft:
@@ -98,6 +147,7 @@ def generate(config: Config, row: Row, client=None) -> Draft:
                 ),
             })
     assert parts is not None
+    parts = fix_description(config, client, parts, keyword, check_source)
 
     facts, dropped = checked_facts((assessment or {}).get("facts") or {}, check_source)
     # 1枚目は外観（scoring/hero.py で選んだもの）。選んでいなければ元記事の og:image
