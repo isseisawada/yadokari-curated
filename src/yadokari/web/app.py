@@ -279,7 +279,7 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
     @app.post("/drafts/{draft_id}")
     def save(draft_id: int, title: str = Form(...), excerpt: str = Form(""),
              body_html: str = Form(...), tags: str = Form(""), featured_image: str = Form(""),
-             scheduled_at: str = Form("")):
+             scheduled_at: str = Form(""), quote: str = Form("")):
         when = None
         if scheduled_at:
             dt = datetime.fromisoformat(scheduled_at).replace(tzinfo=tz)
@@ -289,6 +289,7 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
                 conn, draft_id, title=title.strip(), excerpt=excerpt.strip(), body_html=body_html,
                 tags=[t.strip() for t in tags.replace("、", ",").split(",") if t.strip()],
                 featured_image=featured_image.strip() or None, scheduled_at=when,
+                quote=quote.strip(),
             )
             conn.commit()
         return back(f"/drafts/{draft_id}", msg="保存しました")

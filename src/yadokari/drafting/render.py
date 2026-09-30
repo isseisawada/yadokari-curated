@@ -49,6 +49,7 @@ class DraftParts:
     sections: list[tuple[str, list[str]]]
     closing: list[str]
     description: str = ""
+    quote: str = ""
     faq: list[tuple[str, str]] = field(default_factory=list)
 
     @classmethod
@@ -67,6 +68,7 @@ class DraftParts:
             ],
             closing=paras(data.get("closing")),
             description=plain(str(data.get("description") or "")).replace("\n", ""),
+            quote=plain(str(data.get("quote") or "")).replace("\n", ""),
             faq=[
                 (plain(str(f.get("q") or "")), plain(str(f.get("a") or "")))
                 for f in data.get("faq") or []
@@ -75,7 +77,8 @@ class DraftParts:
         )
 
     def all_text(self) -> str:
-        chunks = [self.catch, self.subject, self.name, *self.lead, *self.closing, self.description]
+        chunks = [self.catch, self.subject, self.name, *self.lead, *self.closing, self.description,
+                  self.quote]
         for heading, ps in self.sections:
             chunks.append(heading)
             chunks.extend(ps)

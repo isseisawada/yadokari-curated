@@ -152,21 +152,21 @@ def reset_to_scored(conn: DbConnection, article_id: int) -> None:
 # ----------------------------------------------------------------------
 def save_draft(conn: DbConnection, article_id: int, *, title: str, excerpt: str, body_html: str,
                tags: list[str], featured_image: str | None, warnings: list[str],
-               model: str) -> int:
+               model: str, quote: str | None = None) -> int:
     """作り直しても1記事1本。WP の post ID は消さない（次の送信で同じ投稿を更新する）。"""
     existing = get_draft_by_article(conn, article_id)
     values = (title, excerpt, body_html, json.dumps(tags, ensure_ascii=False), featured_image,
-              json.dumps(warnings, ensure_ascii=False), model, now_iso())
+              json.dumps(warnings, ensure_ascii=False), model, now_iso(), quote)
     if existing is None:
         row = conn.execute(
             "INSERT INTO drafts (title, excerpt, body_html, tags, featured_image, warnings, model,"
-            " generated_at, article_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            " generated_at, quote, article_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
             (*values, article_id),
         ).fetchone()
         return row["id"]
     conn.execute(
         "UPDATE drafts SET title = ?, excerpt = ?, body_html = ?, tags = ?, featured_image = ?,"
-        " warnings = ?, model = ?, generated_at = ?, edited_at = NULL WHERE id = ?",
+        " warnings = ?, model = ?, generated_at = ?, quote = ?, edited_at = NULL WHERE id = ?",
         (*values, existing["id"]),
     )
     return existing["id"]
@@ -181,13 +181,14 @@ def get_draft_by_article(conn: DbConnection, article_id: int) -> Row | None:
 
 
 def edit_draft(conn: DbConnection, draft_id: int, *, title: str, excerpt: str, body_html: str,
-               tags: list[str], featured_image: str | None, scheduled_at: str | None) -> None:
-    """人の編集。公開済みのものは触らない。"""
+               tags: list[str], featured_image: str | None, scheduled_at: str | None,
+               quote: str | None = None) -> None:
+    """人の編集。公開済みのものは触らない。quote は None なら今のまま（空文字で消す）。"""
     conn.execute(
         "UPDATE drafts SET title = ?, excerpt = ?, body_html = ?, tags = ?, featured_image = ?,"
-        " scheduled_at = ?, edited_at = ? WHERE id = ? AND state != 'published'",
+        " scheduled_at = ?, quote = COALESCE(?, quote), edited_at = ? WHERE id = ? AND state != 'published'",
         (title, excerpt, body_html, json.dumps(tags, ensure_ascii=False), featured_image,
-         scheduled_at, now_iso(), draft_id),
+         scheduled_at, quote, now_iso(), draft_id),
     )
 
 

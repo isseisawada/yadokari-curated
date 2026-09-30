@@ -38,6 +38,7 @@ class Draft:
     body_html: str
     tags: list[str]
     featured_image: str | None
+    quote: str
     warnings: list[str]
     chars: int
 
@@ -121,6 +122,7 @@ def generate(config: Config, row: Row, client=None) -> Draft:
         body_html=body,
         tags=tags,
         featured_image=featured,
+        quote=parts.quote,
         warnings=warnings,
         chars=body_chars(parts),
     )
@@ -136,7 +138,7 @@ def generate_for(config: Config, conn: DbConnection, article_id: int, client=Non
     draft_id = save_draft(
         conn, article_id, title=draft.title, excerpt=draft.excerpt, body_html=draft.body_html,
         tags=draft.tags, featured_image=draft.featured_image, warnings=draft.warnings,
-        model=config.drafting.model,
+        model=config.drafting.model, quote=draft.quote,
     )
     conn.commit()
     log.info("下書きを作りました: article=%s draft=%s（%d字）", article_id, draft_id, draft.chars)
