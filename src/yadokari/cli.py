@@ -11,6 +11,7 @@
     python -m yadokari.cli draft ARTICLE_ID
     python -m yadokari.cli wp push DRAFT_ID [--schedule]
     python -m yadokari.cli wp sync
+    python -m yadokari.cli wp check
     python -m yadokari.cli learn
     python -m yadokari.cli monitor
     python -m yadokari.cli report
@@ -154,8 +155,38 @@ def _cmd_draft(cfg, args) -> int:
     return 0
 
 
+def _wp_check(cfg) -> int:
+    """WordPress に**読み取りだけ**でつないで、投稿に要る権限とカテゴリ・タグを確かめる。何も書かない。"""
+    from yadokari.wordpress.client import WordPressClient, WordPressError
+
+    ok = True
+    try:
+        with WordPressClient(cfg.wordpress) as wp:
+            me = wp.me()
+            caps = me.get("capabilities") or {}
+            print(f"ログイン: {me.get('name')}（{me.get('slug')}） 権限: {', '.join(me.get('roles') or [])}")
+            for cap, label in (("edit_posts", "下書きを作る"), ("publish_posts", "予約・公開する"),
+                               ("upload_files", "アイキャッチを取り込む")):
+                has = bool(caps.get(cap))
+                ok &= has
+                print(f"  {label}: {'OK' if has else 'できない'}")
+            for cid in cfg.wordpress.category_ids:
+                print(f"  カテゴリ {cid}: {wp.get_term('categories', cid).get('name')}")
+            for name, tid in cfg.seo.tag_ids.items():
+                got = wp.get_term("tags", tid).get("name")
+                ok &= got == name
+                print(f"  タグ {tid}: {got}{'' if got == name else f'（{name} のはず）'}")
+    except WordPressError as exc:
+        print(f"つながりません: {exc}")
+        return 1
+    return 0 if ok else 1
+
+
 def _cmd_wp(cfg, args) -> int:
     from yadokari.wordpress.publish import push, sync
+
+    if args.action == "check":
+        return _wp_check(cfg)
 
     ensure_migrated(cfg.app.target())
     conn = connect(cfg.app.target())
@@ -293,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=_cmd_draft)
 
     p = sub.add_parser("wp", help="WordPress への送信と状態の確認")
-    p.add_argument("action", choices=["push", "sync"])
+    p.add_argument("action", choices=["check", "push", "sync"])
     p.add_argument("draft_id", type=int, nargs="?")
     p.add_argument("--schedule", action="store_true", help="予約投稿にする（allow_schedule が要る）")
     p.set_defaults(func=_cmd_wp)
