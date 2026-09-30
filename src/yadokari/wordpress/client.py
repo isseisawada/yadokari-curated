@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 
 import httpx
@@ -33,6 +34,16 @@ class WPPost:
                    date=data.get("date"))
 
 
+def auth_headers(user: str, password: str) -> dict[str, str]:
+    """Authorization と同じ中身を X-YC-Auth でも送る。
+
+    yadokari.net ではサーバーの手前で Authorization ヘッダーが捨てられ、REST API が匿名扱いになった
+    （2026-09-30）。wordpress-plugin/yadokari-curated-auth.php（mu-plugins）がこちらを読む。
+    """
+    token = base64.b64encode(f"{user}:{password}".encode()).decode()
+    return {"X-YC-Auth": f"Basic {token}"}
+
+
 class WordPressClient:
     def __init__(self, config: WordPressConfig, http: httpx.Client | None = None) -> None:
         self.config = config
@@ -41,7 +52,7 @@ class WordPressClient:
             user, password = config.require_credentials()
             http = httpx.Client(
                 auth=(user, password), timeout=config.timeout_sec,
-                headers={"User-Agent": "YADOKARI-curated/0.1"},
+                headers={"User-Agent": "YADOKARI-curated/0.1", **auth_headers(user, password)},
             )
         self._http = http
 
