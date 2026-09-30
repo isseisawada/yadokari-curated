@@ -47,7 +47,7 @@ def test_body_matches_existing_layout():
     assert "**" not in html and "<p>- " not in html
     # 写真は全部使い、出典の一覧がある
     assert html.count("wp-caption-text") == 6
-    assert "via;<br />" in html
+    assert '<p>via: <a href="' in html and "via;" not in html
 
 
 def test_html_in_llm_output_is_escaped():
@@ -110,3 +110,13 @@ def test_regenerating_keeps_one_draft_per_article(config, db):
     second = generate_for(config, db, article_id, client=FakeLLM(draft_json(name="Harper II")))
     assert first == second
     assert "Harper II" in get_draft(db, second)["title"]
+
+
+def test_related_links_are_trailer_cabin_tiny_in_that_order(config, db):
+    """2026-09-30 ユーザー指定: 関連：トレーラーハウスの記事一覧／小屋の記事一覧／タイニーハウスの記事一覧"""
+    article_id = add_article(db, status="approved")
+    d = get_draft(db, generate_for(config, db, article_id, client=FakeLLM(draft_json())))
+    related = next(line for line in d["body_html"].splitlines() if line.startswith("<p>関連："))
+    names = [n for n in ("トレーラーハウス", "小屋", "タイニーハウス") if f"{n}の記事一覧" in related]
+    assert names == ["トレーラーハウス", "小屋", "タイニーハウス"]
+    assert related.index("トレーラーハウス") < related.index("小屋") < related.index("タイニーハウスの記事一覧")

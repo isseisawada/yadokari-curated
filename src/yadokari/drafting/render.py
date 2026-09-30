@@ -10,8 +10,8 @@
     〈物件名〉のデータ（事実だけの一覧）        ← SEO/AIO（2026-09-29）
     よくある質問                              ← SEO/AIO（2026-09-29）
     残りの写真
-    via; 出典URL
-    関連: トレーラーハウス・タイニーハウス・小屋の記事一覧（内部リンク）
+    via: 出典URL
+    関連：トレーラーハウス／小屋／タイニーハウスの記事一覧（内部リンク。この順で固定）
 
 写真は元サイトへの直リンク、キャプションは `via: ドメイン`（元記事へのリンク）。
 既存記事と同じ運用（2026-09-28 ユーザー判断）。alt は空にせず、物件名と種別を入れる。
@@ -155,8 +155,9 @@ def build_body(
     while imgs:
         take()
     link = escape(source_url, quote=True)
+    # 2026-09-30 ユーザー指定: 「via: URL」を1行で（すべての記事）
     out.append(
-        f'<p>via;<br /><a href="{link}" target="_blank" rel="noopener">{escape(source_url)}</a></p>'
+        f'<p>via: <a href="{link}" target="_blank" rel="noopener">{escape(source_url)}</a></p>'
     )
     if internal_links and link_keywords:
         items = [

@@ -28,6 +28,8 @@ from yadokari.scoring.hero import ordered_images
 
 log = get_logger(__name__)
 
+RELATED_ORDER = ("トレーラーハウス", "小屋", "タイニーハウス")
+
 
 @dataclass
 class Draft:
@@ -102,7 +104,8 @@ def generate(config: Config, row: Row, client=None) -> Draft:
     featured = row["hero_image"] or row["og_image"] or (images[0] if images else None)
     tags = seo.tags_for((assessment or {}).get("kind", ""),
                         (assessment or {}).get("suggested_tags") or [])
-    link_keywords = [keyword] + [k for k in seo.required_tags if k != keyword]
+    # 関連リンクは「トレーラーハウス／小屋／タイニーハウス」の順で3つとも（2026-09-30 ユーザー指定）
+    link_keywords = [k for k in RELATED_ORDER if k in seo.internal_links]
     title = build_title(d.title_prefix, parts)
     excerpt = excerpt_of(parts)
     body = build_body(
