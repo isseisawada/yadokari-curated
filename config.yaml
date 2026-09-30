@@ -110,7 +110,7 @@ wordpress:
   category_ids: [2184]          # タイニーハウス、最前線
   # 予約投稿を許すか。2026-09-30 ユーザーが WP 上の下書きを確認して OK（予約を有効化）
   allow_schedule: true
-  post_times: ["19:00"]         # 既存記事の大半が 19:00。数を増やすと1日の本数が増える
+  post_times: ["08:00"]         # 2026-09-30 ユーザー指定: 毎日 AM8時。数を増やすと1日の本数が増える
   slug_prefix: "yc-"
   # アイキャッチは元写真を WP に取り込む（既存記事と同じ。2026-09-28 ユーザー判断）
   upload_featured_image: true
