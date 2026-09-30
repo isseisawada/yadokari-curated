@@ -1,0 +1,34 @@
+name: auto
+
+# 承認した記事を下書きにして、空いている最短の枠（config の post_times）へ予約する。
+# 毎時。GitHub の定期実行は遅れることがあるが、公開そのものは WordPress の予約投稿なので時刻はずれない。
+# 止めるときは config.yaml の wordpress.auto_schedule を false にする。
+on:
+  schedule:
+    - cron: "41 * * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "1回に作る下書きの上限"
+        default: "3"
+
+concurrency:
+  group: auto
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      WP_USER: ${{ secrets.WP_USER }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[postgres]"
+      - run: python -m yadokari.cli auto --limit "${{ inputs.limit || '3' }}"
