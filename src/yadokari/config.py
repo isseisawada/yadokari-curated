@@ -257,6 +257,19 @@ class LearningConfig(BaseModel):
     batch_size: int = 20
 
 
+class XConfig(BaseModel):
+    """X（@yadokari_mobi）への投稿。**投稿するのは WordPress**（公開の瞬間。mu-plugin yadokari-curated-x.php）。
+
+    こちらは投稿文を作って WP に渡すだけ（yc_tweet_text）。鍵は WP の wp-config.php にだけ置く。
+    enabled が false のあいだは投稿文を渡さない（= 投稿されない）。2026-09-30 ユーザー指定（B: 公開と同時）
+    """
+
+    enabled: bool = False
+    # 付けるハッシュタグの候補（記事のタグにあるものだけ）
+    hashtags: list[str] = ["タイニーハウス", "小屋", "トレーラーハウス"]
+    max_hashtags: int = 2
+
+
 class Config(BaseModel):
     app: AppConfig = AppConfig()
     http: HttpConfig
@@ -267,6 +280,7 @@ class Config(BaseModel):
     wordpress: WordPressConfig = WordPressConfig()
     learning: LearningConfig = LearningConfig()
     seo: SeoConfig = SeoConfig()
+    x: XConfig = XConfig()
 
     @property
     def anthropic_api_key(self) -> str:
