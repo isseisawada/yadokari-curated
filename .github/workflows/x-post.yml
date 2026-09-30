@@ -1,0 +1,33 @@
+name: x-post
+
+# 公開済みの記事を X に投稿する（例外用）。ふだんは WordPress の mu-plugin が公開の瞬間に投稿する。
+on:
+  workflow_dispatch:
+    inputs:
+      draft_id:
+        description: "下書きの番号（審査画面 DRAFTS の #）"
+        required: true
+      dry_run:
+        description: "投稿せず文面だけ出す"
+        type: boolean
+        default: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      WP_USER: ${{ secrets.WP_USER }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: python -m yadokari.cli x post "${{ inputs.draft_id }}" ${{ inputs.dry_run && '--dry-run' || '' }}

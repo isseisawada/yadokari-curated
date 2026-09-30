@@ -26,3 +26,23 @@ def test_long_quote_is_cut_not_the_hashtags():
     text = compose(XConfig(), title=TITLE, prefix="【海外事例】", quote=QUOTE * 5, tags=["小屋"])
     assert "…" in text and text.endswith("#小屋")
     assert weight(text) + 2 + URL_WEIGHT <= LIMIT
+
+
+def test_post_signs_with_oauth1_and_returns_id():
+    import httpx
+
+    from yadokari.sns.x import post
+
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["auth"] = request.headers["authorization"]
+        seen["url"] = str(request.url)
+        return httpx.Response(201, json={"data": {"id": "123", "text": "x"}})
+
+    keys = {"api_key": "ck", "api_secret": "cs", "access_token": "at", "access_secret": "as"}
+    tid = post("こんにちは", keys, http=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert tid == "123"
+    assert seen["url"] == "https://api.x.com/2/tweets"
+    assert seen["auth"].startswith("OAuth ") and 'oauth_signature="' in seen["auth"]
+    assert "cs" not in seen["auth"] and "as" not in seen["auth"].replace("oauth_", "")
