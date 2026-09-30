@@ -191,3 +191,13 @@ def test_wp_check_reads_only(config, capsys, monkeypatch):
     assert cli._wp_check(config) == 0
     assert set(methods) == {"GET"}
     assert "予約・公開する: OK" in capsys.readouterr().out
+
+
+def test_credentials_also_go_in_x_yc_auth():
+    """yadokari.net では Authorization が捨てられた（2026-09-30）。mu-plugin が X-YC-Auth を読む。"""
+    import base64
+
+    from yadokari.wordpress.client import auth_headers
+
+    h = auth_headers("bot", "abcd efgh")
+    assert h["X-YC-Auth"] == "Basic " + base64.b64encode(b"bot:abcd efgh").decode()

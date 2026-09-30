@@ -17,4 +17,4 @@ jobs:
       - run: ruff check src tests scripts
       - run: pytest -q
       - name: WP プラグインの文法チェック
-        run: php -l wordpress-plugin/yadokari-curated-seo.php
+        run: for f in wordpress-plugin/*.php; do php -l "$f"; done
