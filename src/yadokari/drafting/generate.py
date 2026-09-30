@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 import anthropic
 
+from yadokari.collect.page import upgrade_image_url
 from yadokari.config import Config
 from yadokari.db.connection import DbConnection, Row
 from yadokari.db.repository import get_article, save_draft
@@ -151,8 +152,10 @@ def generate(config: Config, row: Row, client=None) -> Draft:
 
     facts, dropped = checked_facts((assessment or {}).get("facts") or {}, check_source)
     # 1枚目は外観（scoring/hero.py で選んだもの）。選んでいなければ元記事の og:image
-    images = ordered_images(row)[: d.max_images]
+    # 集めたときより後に足した「大きい版に直す」規則も効かせる（何度かけても同じ）
+    images = [upgrade_image_url(u) for u in ordered_images(row)[: d.max_images]]
     featured = row["hero_image"] or row["og_image"] or (images[0] if images else None)
+    featured = upgrade_image_url(featured) if featured else None
     tags = seo.tags_for((assessment or {}).get("kind", ""),
                         (assessment or {}).get("suggested_tags") or [])
     # 関連リンクは「トレーラーハウス／小屋／タイニーハウス」の順で3つとも（2026-09-30 ユーザー指定）

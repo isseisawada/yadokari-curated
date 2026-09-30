@@ -13,8 +13,10 @@
 
 from __future__ import annotations
 
+import html
 import json
 import mimetypes
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from urllib.parse import urlparse
@@ -264,3 +266,46 @@ def sync(config: Config, conn: DbConnection, wp: WordPressClient | None = None,
         if own:
             wp.close()
     return result
+
+
+# ----------------------------------------------------------------------
+# 写真を大きい版に差し替える（2026-09-30 ArchDaily の medium_jpg が小さかった）
+# ----------------------------------------------------------------------
+_IMG_SRC = re.compile(r'(<img\b[^>]*?\bsrc=")([^"]+)(")')
+
+
+def refresh_images(config: Config, conn: DbConnection, *, wp: WordPressClient | None = None,
+                   fetch=None) -> list[tuple[int, str]]:
+    """公開前の下書きの写真 URL を upgrade_image_url で直し、WP に送ってあれば同じ状態で送り直す。
+
+    アイキャッチが変わったら取り込み直す（古いメディアは WP に残る）。(draft_id, 結果) を返す。
+    """
+    from yadokari.collect.page import upgrade_image_url
+
+    out: list[tuple[int, str]] = []
+    rows = conn.execute(
+        "SELECT id FROM drafts WHERE state IN ('editing', 'wp_draft', 'scheduled') ORDER BY id"
+    ).fetchall()
+    for r in rows:
+        d = get_draft(conn, r["id"])
+        body = _IMG_SRC.sub(lambda m: m.group(1) + html.escape(
+            upgrade_image_url(html.unescape(m.group(2))), quote=True) + m.group(3), d["body_html"])
+        featured = upgrade_image_url(d["featured_image"]) if d["featured_image"] else None
+        if body == d["body_html"] and featured == d["featured_image"]:
+            continue
+        conn.execute(
+            "UPDATE drafts SET body_html = ?, featured_image = ?,"
+            " wp_media_id = CASE WHEN ? THEN NULL ELSE wp_media_id END WHERE id = ?",
+            (body, featured, featured != d["featured_image"], d["id"]),
+        )
+        conn.commit()
+        if d["wp_post_id"] is None:
+            out.append((d["id"], "差し替え（WP には未送信）"))
+            continue
+        try:
+            res = push(config, conn, d["id"], schedule=d["state"] == "scheduled", wp=wp, fetch=fetch)
+        except Exception as exc:  # noqa: BLE001 - 1本の失敗で残りを止めない
+            out.append((d["id"], f"送り直しに失敗: {exc}"))
+            continue
+        out.append((d["id"], f"差し替えて送り直し（post {res.post_id} {res.status}）"))
+    return out
