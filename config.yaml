@@ -128,3 +128,8 @@ seo:
   data_box: true
   faq: true
   send_facts_meta: false        # wordpress-plugin/ を入れてから true
+
+x:
+  # 記事の公開と同時に X（@yadokari_mobi）へ投稿する。投稿するのは WP の mu-plugin（yadokari-curated-x.php）。
+  # 2026-09-30 ユーザーが投稿文の形を確認して OK。止めるときは false（次に送る記事から投稿文を渡さない）
+  enabled: true

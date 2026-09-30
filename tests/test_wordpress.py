@@ -261,6 +261,7 @@ def test_refresh_images_rewrites_and_repushes_keeping_schedule(config, db):
 
 
 def test_tweet_text_is_sent_only_when_x_is_enabled(config, db):
+    config.x.enabled = False
     wp = FakeWP()
     draft_id = _draft(config, db)
     r = push(config, db, draft_id, wp=wp.client(config), fetch=fake_fetch)
