@@ -51,7 +51,7 @@ def slug_for(config: Config, article_id: int) -> str:
 # 予定枠
 # ----------------------------------------------------------------------
 def next_free_slot(config: Config, taken: set[str], now: datetime | None = None,
-                   days_ahead: int = 30) -> datetime:
+                   days_ahead: int = 400) -> datetime:
     """空いている次の枠（post_times の数＝1日の本数）。frmg の plan.py と同じ考え方。
 
     DB には UTC で持つ。現地時刻を混ぜると環境によってずれる。
