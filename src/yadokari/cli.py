@@ -15,6 +15,7 @@
     python -m yadokari.cli wp images
     python -m yadokari.cli wp resend
     python -m yadokari.cli auto [--limit 3]
+    python -m yadokari.cli x post DRAFT_ID [--dry-run]
     python -m yadokari.cli learn
     python -m yadokari.cli monitor
     python -m yadokari.cli report
@@ -258,6 +259,36 @@ def _cmd_auto(cfg, args) -> int:
     return 1 if res.failed else 0
 
 
+def _cmd_x(cfg, args) -> int:
+    """公開済みの記事を、こちらから X に投稿する（例外用。ふだんは WP が公開の瞬間に投稿）。"""
+    from yadokari.db.repository import get_draft
+    from yadokari.sns.x import compose, keys_from_env, post
+    from yadokari.wordpress.client import WordPressClient
+
+    conn = connect(cfg.app.target())
+    try:
+        d = get_draft(conn, args.draft_id)
+    finally:
+        conn.close()
+    if d is None or d["wp_post_id"] is None:
+        print("WP に送った下書きではありません")
+        return 2
+    with WordPressClient(cfg.wordpress) as wp:
+        wp_post = wp.get_post(d["wp_post_id"])
+    if wp_post.status != "publish":
+        print(f"まだ公開されていません（{wp_post.status}）。公開前の記事は WP が公開の瞬間に投稿します")
+        return 2
+    text = compose(cfg.x, title=d["title"], prefix=cfg.drafting.title_prefix,
+                   quote=d["quote"] or "", tags=json.loads(d["tags"] or "[]"))
+    text += "\n\n" + (wp_post.link or "")
+    print(text)
+    if args.dry_run:
+        return 0
+    tweet_id = post(text, keys_from_env())
+    print(f"投稿しました: https://x.com/i/web/status/{tweet_id}")
+    return 0
+
+
 def _cmd_learn(cfg, args) -> int:
     from yadokari.learning.loop import run_learning
 
@@ -379,6 +410,12 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("auto", help="承認済みを下書きにして、空いている最短の枠へ予約する")
     p.add_argument("--limit", type=int, default=3, help="1回に作る下書きの上限")
     p.set_defaults(func=_cmd_auto)
+
+    p = sub.add_parser("x", help="公開済みの記事を X に投稿する（例外用）")
+    p.add_argument("action", choices=["post"])
+    p.add_argument("draft_id", type=int)
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=_cmd_x)
 
     p = sub.add_parser("learn", help="非承認理由からルール候補を育てる")
     p.set_defaults(func=_cmd_learn)
