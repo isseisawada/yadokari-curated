@@ -61,8 +61,8 @@ def test_approve_draft_edit_and_push_flow(env):
     page = c.get(draft_path).text
     assert "【海外事例】" in page and "wp-caption" in page
     assert "SEO / AIO" in page and "主キーワード「トレーラーハウス」" in page
-    # 予約ボタンは無効（allow_schedule: false）
-    assert "disabled" in page
+    # 予約ボタンは押せる（allow_schedule: true。2026-09-30 有効化）
+    assert "予約はまだ無効です" not in page
 
     c.post(draft_path, data={"title": "直したタイトル", "excerpt": "抜粋", "body_html": "<p>本文</p>",
                              "tags": "タイニーハウス、オーストラリア", "featured_image": "",
@@ -76,8 +76,10 @@ def test_approve_draft_edit_and_push_flow(env):
     assert next(iter(wp.posts.values()))["status"] == "draft"
 
     r = c.post(f"{draft_path}/push", data={"mode": "schedule"}, follow_redirects=False)
-    assert "err=" in r.headers["location"]  # 予約はまだ許可されていない
-    assert next(iter(wp.posts.values()))["status"] == "draft"
+    assert "msg=" in r.headers["location"]
+    post = next(iter(wp.posts.values()))
+    assert post["status"] == "future"
+    assert post["date"] == "2030-01-05T19:00:00"
 
 
 def test_rules_page_and_approval(env):

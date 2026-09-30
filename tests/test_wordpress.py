@@ -70,6 +70,7 @@ def test_lost_post_id_is_recovered_by_slug(config, db):
 
 
 def test_schedule_is_refused_until_allowed(config, db):
+    config.wordpress.allow_schedule = False
     wp = FakeWP()
     draft_id = _draft(config, db, datetime.now(UTC) + timedelta(days=1))
     assert config.wordpress.allow_schedule is False
