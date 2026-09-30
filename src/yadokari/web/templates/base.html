@@ -17,7 +17,7 @@
   a { color:inherit; }
   .gh { display:flex; align-items:center; gap:36px; height:84px; padding:0 20px; border-bottom:1px solid var(--line); background:#fff; position:sticky; top:0; z-index:10; }
   .logo { font-weight:900; font-size:26px; letter-spacing:-.02em; text-decoration:none; line-height:1; }
-  .logo small { font-size:13px; font-weight:800; margin-left:2px; }
+  .logo img { display:block; height:35px; width:auto; }
   .gh nav { display:flex; gap:32px; }
   .gh nav a { text-decoration:none; font-weight:800; font-size:18px; letter-spacing:.01em; padding:6px 0; border-bottom:3px solid transparent; }
   .gh nav a.on { border-color:var(--ink); }
@@ -102,7 +102,8 @@
     .gh .right { display:none; }
     .gh nav { gap:12px; min-width:0; }
     .gh nav a { font-size:13px; }
-    .logo { font-size:18px; flex:none; }
+    .logo { flex:none; }
+    .logo img { height:24px; }
     .sub { padding:14px 12px; gap:10px; }
     .sub .tabs { margin-left:0; gap:6px 16px; }
     main { padding:20px 12px 80px; }
@@ -117,7 +118,7 @@
 </head>
 <body>
 <header class="gh">
-  <a class="logo" href="/">YADOKARI<small>.net</small></a>
+  <a class="logo" href="/"><img src="https://yadokari.net/wp/wp-content/themes/yadokari2025/assets/img/common/hlogo.svg" alt="YADOKARI" width="189" height="35"></a>
   <nav>
     <a href="/articles" class="{{ 'on' if request.url.path.startswith('/articles') or request.url.path == '/' }}">CURATE</a>
     <a href="/drafts" class="{{ 'on' if request.url.path.startswith('/drafts') }}">DRAFTS</a>
