@@ -114,6 +114,13 @@ def _payload(config: Config, draft: Row, article_id: int, wp: WordPressClient,
     }
     if "quote" in draft.keys() and draft["quote"]:
         payload["yc_quote"] = draft["quote"]
+    if config.x.enabled:
+        # X の投稿文。公開の瞬間に WP（mu-plugin yadokari-curated-x.php）が URL を足して投稿する
+        from yadokari.sns.x import compose
+
+        payload["yc_tweet_text"] = compose(
+            config.x, title=draft["title"], prefix=config.drafting.title_prefix,
+            quote=draft["quote"] or "" if "quote" in draft.keys() else "", tags=tags)
     if tags:
         payload["tags"] = wp.tag_ids(tags, fixed=config.seo.tag_ids)
     if config.seo.send_facts_meta and facts:

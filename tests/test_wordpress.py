@@ -258,3 +258,13 @@ def test_refresh_images_rewrites_and_repushes_keeping_schedule(config, db):
     assert post["status"] == "future"
     assert len(wp.media) == media_before + 1  # アイキャッチを取り込み直した
     assert refresh_images(config, db, wp=wp.client(config), fetch=fake_fetch) == []
+
+
+def test_tweet_text_is_sent_only_when_x_is_enabled(config, db):
+    wp = FakeWP()
+    draft_id = _draft(config, db)
+    r = push(config, db, draft_id, wp=wp.client(config), fetch=fake_fetch)
+    assert "yc_tweet_text" not in wp.posts[r.post_id]
+    config.x.enabled = True
+    r = push(config, db, draft_id, wp=wp.client(config), fetch=fake_fetch)
+    assert wp.posts[r.post_id]["yc_tweet_text"]
