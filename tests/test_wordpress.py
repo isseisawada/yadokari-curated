@@ -116,6 +116,20 @@ def test_featured_image_failure_does_not_stop_the_post(config, db):
     wp = FakeWP()
     r = push(config, db, _draft(config, db), wp=wp.client(config), fetch=broken)
     assert "featured_media" not in wp.posts[r.post_id]
+    # 取り込めなければ元の URL のままアイキャッチに（mu-plugin → FIFU。2026-09-30）
+    assert wp.posts[r.post_id]["yc_featured_url"].startswith("http")
+
+
+def test_resend_keeps_schedule(config, db):
+    from yadokari.wordpress.publish import resend
+
+    config.wordpress.allow_schedule = True
+    wp = FakeWP()
+    draft_id = _draft(config, db, datetime.now(UTC) + timedelta(days=1))
+    push(config, db, draft_id, schedule=True, wp=wp.client(config), fetch=fake_fetch)
+    done = resend(config, db, wp=wp.client(config), fetch=fake_fetch)
+    assert [x[0] for x in done] == [draft_id]
+    assert next(iter(wp.posts.values()))["status"] == "future"
 
 
 def test_sync_marks_published_and_reports_missed_schedules(config, db):

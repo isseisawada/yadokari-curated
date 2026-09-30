@@ -13,6 +13,7 @@
     python -m yadokari.cli wp sync
     python -m yadokari.cli wp check
     python -m yadokari.cli wp images
+    python -m yadokari.cli wp resend
     python -m yadokari.cli auto [--limit 3]
     python -m yadokari.cli learn
     python -m yadokari.cli monitor
@@ -194,7 +195,7 @@ def _wp_check(cfg) -> int:
 
 
 def _cmd_wp(cfg, args) -> int:
-    from yadokari.wordpress.publish import push, refresh_images, sync
+    from yadokari.wordpress.publish import push, refresh_images, resend, sync
 
     if args.action == "check":
         return _wp_check(cfg)
@@ -211,6 +212,12 @@ def _cmd_wp(cfg, args) -> int:
             for n in r.notes:
                 print("  ", n)
             return 0
+        if args.action == "resend":
+            done = resend(cfg, conn)
+            for draft_id, what in done:
+                print(f"draft {draft_id}: {what}")
+            print(f"送り直し {len(done)} 本")
+            return 1 if any("失敗" in w for _, w in done) else 0
         if args.action == "images":
             done = refresh_images(cfg, conn)
             for draft_id, what in done:
@@ -364,7 +371,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=_cmd_draft)
 
     p = sub.add_parser("wp", help="WordPress への送信と状態の確認")
-    p.add_argument("action", choices=["check", "push", "sync", "images"])
+    p.add_argument("action", choices=["check", "push", "sync", "images", "resend"])
     p.add_argument("draft_id", type=int, nargs="?")
     p.add_argument("--schedule", action="store_true", help="予約投稿にする（allow_schedule が要る）")
     p.set_defaults(func=_cmd_wp)

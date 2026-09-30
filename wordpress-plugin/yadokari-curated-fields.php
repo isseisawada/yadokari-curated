@@ -2,7 +2,7 @@
 /**
  * Plugin Name: YADOKARI CURATED fields
  * Description: キュレーション記事システム（yadokari-curated）から、REST API に出ていない項目を受け取る。記事分類「TINY HOUSE JOURNAL」と ACF の QUOTE。
- * Version: 1.0
+ * Version: 1.1
  *
  * 置き場所: wp-content/mu-plugins/yadokari-curated-fields.php（有効化の操作は要らない）
  *
@@ -10,6 +10,8 @@
  * 投稿の作成・更新のときに次の2つを受け取って書き込む。読み出し（GET）では何も返さない。
  * - yc_journal: true なら記事分類「TINY HOUSE JOURNAL」（tinyhousejournal）を付ける（ほかの分類は外さない）
  * - yc_quote:   ACF の QUOTE 欄に入れる文字列
+ * - yc_featured_url: アイキャッチにする外部の画像 URL（プラグイン FIFU = Featured Image from URL に渡す）。
+ *   画像サーバが自動取得を許さず、メディアに取り込めないとき用（2026-09-30）
  * 書き込めるのは、その投稿を編集できるユーザーだけ（REST API の通常の権限確認のあと）。
  */
 
@@ -60,6 +62,23 @@ add_action('rest_api_init', function () {
                 update_field($field['key'], $value, $post->ID);
             } else {
                 update_post_meta($post->ID, 'quote', $value);
+            }
+            return true;
+        },
+        'schema' => array('type' => 'string', 'context' => array('edit')),
+    ));
+
+    register_rest_field('post', 'yc_featured_url', array(
+        'get_callback' => null,
+        'update_callback' => function ($value, $post) {
+            $url = esc_url_raw((string) $value);
+            if ($url === '') {
+                return true;
+            }
+            if (function_exists('fifu_dev_set_image')) {
+                fifu_dev_set_image($post->ID, $url);
+            } else {
+                update_post_meta($post->ID, 'fifu_image_url', $url);
             }
             return true;
         },

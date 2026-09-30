@@ -121,6 +121,10 @@ def _payload(config: Config, draft: Row, article_id: int, wp: WordPressClient,
         payload["meta"] = {"yc_facts": json.dumps(facts, ensure_ascii=False)}
     if media_id:
         payload["featured_media"] = media_id
+    elif draft["featured_image"]:
+        # 取り込めない（画像サーバの robots が自動取得を許さない）ときは、元の URL のまま
+        # アイキャッチにする。プラグイン FIFU（Featured Image from URL）に渡す（2026-09-30 ユーザー判断）
+        payload["yc_featured_url"] = draft["featured_image"]
     if status == "future":
         payload["date"] = to_wp_local(config, draft["scheduled_at"])
         payload["date_gmt"] = datetime.fromisoformat(draft["scheduled_at"]).astimezone(UTC).replace(
@@ -308,4 +312,24 @@ def refresh_images(config: Config, conn: DbConnection, *, wp: WordPressClient | 
             out.append((d["id"], f"送り直しに失敗: {exc}"))
             continue
         out.append((d["id"], f"差し替えて送り直し（post {res.post_id} {res.status}）"))
+    return out
+
+
+def resend(config: Config, conn: DbConnection, *, wp: WordPressClient | None = None,
+           fetch=None) -> list[tuple[int, str]]:
+    """WP に送ってある公開前の下書きを、今の状態（下書き／予約）のまま全部送り直す。"""
+    now = (datetime.now(UTC) + timedelta(minutes=10)).isoformat()
+    rows = conn.execute(
+        "SELECT id, state FROM drafts WHERE wp_post_id IS NOT NULL AND state IN ('wp_draft', 'scheduled')"
+        " AND (state = 'wp_draft' OR scheduled_at > ?) ORDER BY id",
+        (now,),
+    ).fetchall()
+    out: list[tuple[int, str]] = []
+    for r in rows:
+        try:
+            res = push(config, conn, r["id"], schedule=r["state"] == "scheduled", wp=wp, fetch=fetch)
+        except Exception as exc:  # noqa: BLE001 - 1本の失敗で残りを止めない
+            out.append((r["id"], f"失敗: {exc}"))
+            continue
+        out.append((r["id"], f"post {res.post_id} {res.status}"))
     return out
