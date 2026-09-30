@@ -77,6 +77,7 @@ def test_monitor_flags_scheduled_post_not_published(config, db):
 
 
 def test_monitor_ok_when_nothing_expected(config, db):
+    config.wordpress.allow_schedule = False  # 予約を使っていなければ「今日の予定なし」は警告しない
     report = check(config, db, http=_wp([{"id": 1, "date": "2026-09-28T19:00:00", "link": "x"}]))
     assert report.ok
 
