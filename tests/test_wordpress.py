@@ -188,9 +188,13 @@ def test_wp_check_reads_only(config, capsys, monkeypatch):
         real(self, cfg, http=httpx.Client(transport=httpx.MockTransport(handler)))
 
     monkeypatch.setattr(wpc.WordPressClient, "__init__", init)
+    monkeypatch.setenv("WP_USER", "bot")
+    monkeypatch.setenv("WP_APP_PASSWORD", "abcd efgh ijkl mnop qrst uvwx")
     assert cli._wp_check(config) == 0
     assert set(methods) == {"GET"}
-    assert "予約・公開する: OK" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "予約・公開する: OK" in out
+    assert "英数字24文字" in out and "abcd" not in out  # 値は出さない
 
 
 def test_credentials_also_go_in_x_yc_auth():
