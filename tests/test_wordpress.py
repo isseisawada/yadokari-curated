@@ -159,3 +159,35 @@ def test_more_post_times_means_more_posts_per_day(config):
 
 def test_to_wp_local(config):
     assert to_wp_local(config, "2026-10-01T10:00:00+00:00") == "2026-10-01T19:00:00"
+
+
+def test_wp_check_reads_only(config, capsys, monkeypatch):
+    """wp check は GET だけ。権限とカテゴリ・タグを確かめる。"""
+    import httpx
+
+    from yadokari import cli
+    from yadokari.wordpress import client as wpc
+
+    methods = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        methods.append(request.method)
+        path = request.url.path
+        if path.endswith("/users/me"):
+            return httpx.Response(200, json={"name": "bot", "slug": "bot", "roles": ["editor"], "capabilities": {
+                "edit_posts": True, "publish_posts": True, "upload_files": True}})
+        if "/categories/" in path:
+            return httpx.Response(200, json={"name": "タイニーハウス、最前線"})
+        tid = int(path.rsplit("/", 1)[-1])
+        names = {v: k for k, v in config.seo.tag_ids.items()}
+        return httpx.Response(200, json={"name": names[tid]})
+
+    real = wpc.WordPressClient.__init__
+
+    def init(self, cfg, http=None):
+        real(self, cfg, http=httpx.Client(transport=httpx.MockTransport(handler)))
+
+    monkeypatch.setattr(wpc.WordPressClient, "__init__", init)
+    assert cli._wp_check(config) == 0
+    assert set(methods) == {"GET"}
+    assert "予約・公開する: OK" in capsys.readouterr().out

@@ -63,6 +63,15 @@ class WordPressClient:
             raise WordPressError(f"WordPress が {r.status_code} を返しました: {detail}")
         return r.json()
 
+    # --- 確認（読み取りだけ） -----------------------------------------
+    def me(self) -> dict:
+        """ログインしているユーザー。名前・権限（roles）・できること（capabilities）。"""
+        return self._check(self._http.get(f"{self.api}/users/me", params={"context": "edit"}))
+
+    def get_term(self, kind: str, term_id: int) -> dict:
+        """kind は categories か tags。"""
+        return self._check(self._http.get(f"{self.api}/{kind}/{term_id}"))
+
     # --- 投稿 ---------------------------------------------------------
     def find_by_slug(self, slug: str) -> WPPost | None:
         """**二重投稿の防止。** 同じ slug の投稿がどの状態でもあれば返す。
