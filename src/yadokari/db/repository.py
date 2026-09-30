@@ -203,6 +203,12 @@ def list_drafts(conn: DbConnection, state: str | None = None) -> list[Row]:
     return conn.execute(sql, params).fetchall()
 
 
+def set_schedule(conn: DbConnection, draft_id: int, scheduled_at: str | None) -> None:
+    """自動予約（autopilot）が枠を決める・送信に失敗したら空ける。公開済みは触らない。"""
+    conn.execute("UPDATE drafts SET scheduled_at = ? WHERE id = ? AND state != 'published'",
+                 (scheduled_at, draft_id))
+
+
 def taken_slots(conn: DbConnection, since: str) -> set[str]:
     rows = conn.execute(
         "SELECT scheduled_at FROM drafts WHERE scheduled_at IS NOT NULL AND scheduled_at >= ?",

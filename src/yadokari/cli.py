@@ -12,6 +12,7 @@
     python -m yadokari.cli wp push DRAFT_ID [--schedule]
     python -m yadokari.cli wp sync
     python -m yadokari.cli wp check
+    python -m yadokari.cli auto [--limit 3]
     python -m yadokari.cli learn
     python -m yadokari.cli monitor
     python -m yadokari.cli report
@@ -220,6 +221,29 @@ def _cmd_wp(cfg, args) -> int:
     return 1 if res.missed else 0
 
 
+def _cmd_auto(cfg, args) -> int:
+    from yadokari import autopilot
+
+    ensure_migrated(cfg.app.target())
+    if not (cfg.wordpress.allow_schedule and cfg.wordpress.auto_schedule):
+        print("自動予約は止めてあります（config.yaml の wordpress.auto_schedule / allow_schedule）")
+        return 0
+    conn = connect(cfg.app.target())
+    try:
+        res = autopilot.run(cfg, conn, limit=args.limit)
+    finally:
+        conn.close()
+    print(f"下書き {len(res.generated)} 本 / 予約 {len(res.scheduled)} 本"
+          f" / 保留 {len(res.held)} 本 / 失敗 {len(res.failed)} 件")
+    for draft_id, when in res.scheduled:
+        print(f"  予約: draft {draft_id} {when}")
+    for draft_id, why in res.held:
+        print(f"  保留（人が直す）: draft {draft_id} {why}")
+    for what, err in res.failed:
+        print(f"  失敗: {what} {err}")
+    return 1 if res.failed else 0
+
+
 def _cmd_learn(cfg, args) -> int:
     from yadokari.learning.loop import run_learning
 
@@ -337,6 +361,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("draft_id", type=int, nargs="?")
     p.add_argument("--schedule", action="store_true", help="予約投稿にする（allow_schedule が要る）")
     p.set_defaults(func=_cmd_wp)
+
+    p = sub.add_parser("auto", help="承認済みを下書きにして、空いている最短の枠へ予約する")
+    p.add_argument("--limit", type=int, default=3, help="1回に作る下書きの上限")
+    p.set_defaults(func=_cmd_auto)
 
     p = sub.add_parser("learn", help="非承認理由からルール候補を育てる")
     p.set_defaults(func=_cmd_learn)

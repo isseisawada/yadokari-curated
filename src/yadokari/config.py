@@ -166,7 +166,9 @@ class WordPressConfig(BaseModel):
     # **予約投稿（status=future）を許すか。** 最初は下書きだけを作る段階から始め、
     # WP 上で見て OK が出てから true にする
     allow_schedule: bool = False
-    # 既定の公開時刻（既存記事の大半が 19:00 JST）と1日の本数
+    # 承認した記事を自動で下書きにし、空いている最短の枠へ予約する（autopilot.py。2026-09-30 ユーザー指定）
+    auto_schedule: bool = False
+    # 既定の公開時刻（JST）と1日の本数
     post_times: list[str] = ["19:00"]
     slug_prefix: str = "yc-"
     # アイキャッチは元写真を WP のメディアに取り込む（既存記事と同じ運用。2026-09-28 ユーザー判断）
