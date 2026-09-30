@@ -106,7 +106,12 @@ def _payload(config: Config, draft: Row, article_id: int, wp: WordPressClient,
         "status": status,
         "slug": slug_for(config, article_id),
         "categories": config.wordpress.category_ids,
+        # 記事分類「TINY HOUSE JOURNAL」と ACF の QUOTE。REST に出ていないので
+        # wordpress-plugin/yadokari-curated-fields.php（mu-plugins）が受け取る（2026-09-30）
+        "yc_journal": True,
     }
+    if "quote" in draft.keys() and draft["quote"]:
+        payload["yc_quote"] = draft["quote"]
     if tags:
         payload["tags"] = wp.tag_ids(tags, fixed=config.seo.tag_ids)
     if config.seo.send_facts_meta and facts:

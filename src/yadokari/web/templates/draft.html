@@ -12,6 +12,7 @@
 <div>
 <form method="post" action="/drafts/{{ d['id'] }}">
   <label>タイトル</label><input type="text" name="title" value="{{ d['title'] }}">
+  <label>QUOTE（記事でいちばん心が動くポイント。WP の QUOTE 欄に入る）</label><textarea name="quote" style="min-height:60px">{{ d['quote'] or '' }}</textarea>
   <label>説明文（WP の抜粋 → 検索結果の説明文。{{ (d['excerpt'] or '')|length }}字）</label><textarea name="excerpt" style="min-height:70px">{{ d['excerpt'] or '' }}</textarea>
   <label>本文（HTML）</label><textarea name="body_html" style="min-height:520px;font-family:ui-monospace,monospace;font-size:12px">{{ d['body_html'] }}</textarea>
   <label>タグ（カンマ区切り。WP に既にあるタグだけ付きます）</label><input type="text" name="tags" value="{{ tags }}">

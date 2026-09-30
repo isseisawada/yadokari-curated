@@ -42,6 +42,9 @@ def test_push_creates_a_wp_draft_with_category_tags_and_featured_image(config, d
     assert post["slug"].startswith("yc-")
     d = get_draft(db, draft_id)
     assert (d["state"], d["wp_post_id"]) == ("wp_draft", r.post_id)
+    # 記事分類 TINY HOUSE JOURNAL と QUOTE（mu-plugin の yc_journal / yc_quote が受け取る。2026-09-30）
+    assert post["yc_journal"] is True
+    assert post["yc_quote"] == "風景ごと住まいを考える、小さな家の誠実さ。"
 
 
 def test_push_twice_updates_the_same_post(config, db):
