@@ -161,6 +161,8 @@ _WP_RESIZED = re.compile(r"-(\d{2,4})x(\d{2,4})(?=\.[a-z]{3,4}$)", re.I)
 _QS_WIDTH = re.compile(r"([?&](?:w|width))=(\d+)", re.I)
 _QS_QUALITY = re.compile(r"([?&](?:q|quality))=(\d+)", re.I)
 MIN_WIDTH = 1200
+# ArchDaily（images.adsttc.com）の縮小版 → large（2026-09-30 medium_jpg で記事の写真が小さかった）
+_ADSTTC_SMALL = re.compile(r"/(?:thumb|small|medium)_(jpg|jpeg|png|webp)/", re.I)
 
 
 def upgrade_image_url(url: str) -> str:
@@ -170,6 +172,8 @@ def upgrade_image_url(url: str) -> str:
     m = _WP_RESIZED.search(path)
     if m and max(int(m.group(1)), int(m.group(2))) < MIN_WIDTH:
         path = _WP_RESIZED.sub("", path)
+    if "adsttc.com" in parsed.netloc:
+        path = _ADSTTC_SMALL.sub(r"/large_\1/", path)
     # Dwell の thumbnail.jpg → large.jpg
     if "dwell.com" in parsed.netloc and path.endswith("/thumbnail.jpg"):
         path = path[: -len("thumbnail.jpg")] + "large.jpg"

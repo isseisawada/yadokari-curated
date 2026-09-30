@@ -210,3 +210,37 @@ def test_credentials_also_go_in_x_yc_auth():
 
     h = auth_headers("bot", "abcd efgh")
     assert h["X-YC-Auth"] == "Basic " + base64.b64encode(b"bot:abcd efgh").decode()
+
+
+def test_archdaily_small_images_are_upgraded_to_large():
+    from yadokari.collect.page import upgrade_image_url
+
+    u = "https://images.adsttc.com/media/images/6808/1519/medium_jpg/koto_14.jpg?1745360181"
+    assert upgrade_image_url(u) == "https://images.adsttc.com/media/images/6808/1519/large_jpg/koto_14.jpg?1745360181"
+    assert upgrade_image_url(upgrade_image_url(u)) == upgrade_image_url(u)
+
+
+def test_refresh_images_rewrites_and_repushes_keeping_schedule(config, db):
+    from yadokari.wordpress.publish import refresh_images
+
+    config.wordpress.allow_schedule = True
+    wp = FakeWP()
+    when = datetime.now(UTC) + timedelta(days=2)
+    draft_id = _draft(config, db, when)
+    small = "https://images.adsttc.com/media/images/1/medium_jpg/a.jpg?1"
+    d = get_draft(db, draft_id)
+    db.execute("UPDATE drafts SET body_html = ?, featured_image = ? WHERE id = ?",
+               (d["body_html"] + f'<img src="{small}" />', small, draft_id))
+    db.commit()
+    push(config, db, draft_id, schedule=True, wp=wp.client(config), fetch=fake_fetch)
+    media_before = len(wp.media)
+
+    done = refresh_images(config, db, wp=wp.client(config), fetch=fake_fetch)
+    assert [x[0] for x in done] == [draft_id]
+    d = get_draft(db, draft_id)
+    assert "medium_jpg" not in d["body_html"] and "large_jpg" in d["body_html"]
+    assert "large_jpg" in d["featured_image"]
+    post = wp.posts[d["wp_post_id"]]
+    assert post["status"] == "future"
+    assert len(wp.media) == media_before + 1  # アイキャッチを取り込み直した
+    assert refresh_images(config, db, wp=wp.client(config), fetch=fake_fetch) == []
