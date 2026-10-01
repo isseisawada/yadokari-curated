@@ -2,7 +2,7 @@
 /**
  * Plugin Name: YADOKARI CURATED X
  * Description: キュレーション記事（yadokari-curated）が公開された瞬間に、X（@yadokari_mobi）へ投稿する。
- * Version: 1.0
+ * Version: 1.1
  *
  * 置き場所: wp-content/mu-plugins/yadokari-curated-x.php（有効化の操作は要らない）
  *
@@ -17,6 +17,9 @@
  * - その投稿が「公開」になった瞬間（予約の時刻・手で公開のどちらも）に、本文＋パーマリンクを X に投稿
  * - 1記事1回だけ（yc_tweet_id / yc_tweet_lock）。失敗したら yc_tweet_error に残す（再投稿はしない）
  * - 投稿文が無い記事（ほかの記事）には何もしない
+ *
+ * 1.1（2026-10-01）: 予約投稿が公開されても、W3 Total Cache のページキャッシュが残って
+ * トップページの新着に出なかった。システムの記事が公開されたらページキャッシュを消す。
  */
 
 if (!defined('ABSPATH')) {
@@ -111,3 +114,19 @@ add_action('transition_post_status', function ($new, $old, $post) {
     update_post_meta($post->ID, 'yc_tweet_id', $result);
     delete_post_meta($post->ID, 'yc_tweet_error');
 }, 10, 3);
+
+// 1.1: システムの記事（slug が yc-）が公開されたら、W3 Total Cache のページキャッシュを消す
+// （トップページ・一覧に新着が出るように）。X の投稿とは別に、必ず行う
+add_action('transition_post_status', function ($new, $old, $post) {
+    if ($new !== 'publish' || $old === 'publish' || $post->post_type !== 'post') {
+        return;
+    }
+    if (strpos((string) $post->post_name, 'yc-') !== 0) {
+        return;
+    }
+    if (function_exists('w3tc_flush_posts')) {
+        w3tc_flush_posts();
+    } elseif (function_exists('w3tc_pgcache_flush')) {
+        w3tc_pgcache_flush();
+    }
+}, 20, 3);
