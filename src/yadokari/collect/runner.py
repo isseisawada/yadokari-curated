@@ -116,9 +116,12 @@ def _too_old(item: Item, cutoff: datetime) -> bool:
     if not item.published_at:
         return False
     try:
-        return datetime.fromisoformat(item.published_at) < cutoff
+        when = datetime.fromisoformat(item.published_at)
     except ValueError:
         return False
+    if when.tzinfo is None:  # ページによってはタイムゾーンが無い（New Atlas）。UTC とみなす
+        when = when.replace(tzinfo=UTC)
+    return when < cutoff
 
 
 def _passes_prefilter(item: Item, page: Page | None) -> bool:
@@ -315,9 +318,15 @@ def collect_all(
             if backfill:
                 if not source.backfill_url:
                     continue
-                stats = collect_backfill(config, client, conn, source,
-                                         limit=limit or config.collect.per_source_limit,
-                                         dry_run=dry_run)
+                try:
+                    stats = collect_backfill(config, client, conn, source,
+                                             limit=limit or config.collect.per_source_limit,
+                                             dry_run=dry_run)
+                except Exception as exc:  # noqa: BLE001 - 1つの媒体の失敗で残りを止めない
+                    log.error("%s: バックフィルが途中で止まりました: %s", source.name, exc)
+                    if conn is not None:
+                        conn.rollback()
+                    continue
             else:
                 stats = collect_source(config, client, conn, source, limit=limit, dry_run=dry_run)
             log.info(stats.summary())
