@@ -50,9 +50,8 @@ sources:
   - name: newatlas
     color: "#0086A8"
     feed: "https://newatlas.com/tiny-houses/index.rss"
-    # 過去記事は一覧ページをめくる（フィードはページ送りが無い）
-    url_include: '^https://newatlas\.com/[a-z-]+/[a-z0-9-]{12,}/?$'
-    backfill_url: "https://newatlas.com/tiny-houses/?page={page}"
+    # 過去記事のバックフィルはしない（2026-10-03）: 一覧のページ送りが ?page=N ではなく
+    # 読み込みごとのカーソル（p=...）で、?page=2 以降も1ページ目と同じ中身が返る
   - name: designboom
     color: "#8B1E3F"
     feed: "https://www.designboom.com/tag/cabin/feed/"
@@ -86,6 +85,9 @@ sources:
   # 利用規約は未確認
   - name: inhabitat
     color: "#5B8C5A"
+    # 2026-10-03 止める: GitHub Actions から記事ページが 403。フィードに本文が無く、
+    # タグのフィードに無関係な記事（工具など）も混ざる
+    enabled: false
     feed: "https://inhabitat.com/tag/tiny-homes/feed/"
     backfill_url: "https://inhabitat.com/tag/tiny-homes/feed/?paged={page}"
   - name: yankodesign
