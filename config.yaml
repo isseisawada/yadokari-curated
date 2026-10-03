@@ -34,6 +34,7 @@ sources:
     index_urls: ["https://www.archdaily.com/category/cabins-and-lodges"]
     url_include: '^https://www\.archdaily\.com/\d{6,}/[a-z0-9-]+$'
     lookback_days: 365           # 一覧に少し前の作品も並ぶ（30日だと24件中15件が落ちた）
+    backfill_url: "https://www.archdaily.com/category/cabins-and-lodges?page={page}"
     note: "規約で自動収集禁止。ユーザー判断で収集（2026-09-29）"
   - name: dwell
     color: "#2B2B2B"
@@ -45,12 +46,17 @@ sources:
   - name: tinyhousetalk
     color: "#4E8A2E"
     feed: "https://tinyhousetalk.com/feed/"
+    backfill_url: "https://tinyhousetalk.com/feed/?paged={page}"
   - name: newatlas
     color: "#0086A8"
     feed: "https://newatlas.com/tiny-houses/index.rss"
+    # 過去記事は一覧ページをめくる（フィードはページ送りが無い）
+    url_include: '^https://newatlas\.com/[a-z-]+/[a-z0-9-]{12,}/?$'
+    backfill_url: "https://newatlas.com/tiny-houses/?page={page}"
   - name: designboom
     color: "#8B1E3F"
     feed: "https://www.designboom.com/tag/cabin/feed/"
+    backfill_url: "https://www.designboom.com/tag/cabin/feed/?paged={page}"
   - name: leibal
     color: "#B5AFA4"
     feed: "https://leibal.com/feed/"
@@ -58,10 +64,12 @@ sources:
   - name: dezeen
     color: "#000000"
     feed: "https://www.dezeen.com/tag/cabins/feed/"
+    backfill_url: "https://www.dezeen.com/tag/cabins/feed/?paged={page}"
     fetch_article: false         # 記事ページはデータセンターから 403。フィードが全文
   - name: dezeen-micro
     color: "#000000"
     feed: "https://www.dezeen.com/tag/micro-homes/feed/"
+    backfill_url: "https://www.dezeen.com/tag/micro-homes/feed/?paged={page}"
     fetch_article: false
   - name: tinyhouseblog
     color: "#8B5A2B"
@@ -73,6 +81,18 @@ sources:
     feed: "https://www.gessato.com/feed/"
     prefilter: true
     note: "規約で自動収集禁止。ユーザー判断で収集（2026-09-29）"
+
+  # 2026-10-03 追加（ユーザー指定: 媒体を増やす）。robots.txt で記事・フィードは許可を確認済み。
+  # 利用規約は未確認
+  - name: inhabitat
+    color: "#5B8C5A"
+    feed: "https://inhabitat.com/tag/tiny-homes/feed/"
+    backfill_url: "https://inhabitat.com/tag/tiny-homes/feed/?paged={page}"
+  - name: yankodesign
+    color: "#C9A227"
+    feed: "https://www.yankodesign.com/tag/tiny-house/feed/"
+    backfill_url: "https://www.yankodesign.com/tag/tiny-house/feed/?paged={page}"
+    prefilter: true              # プロダクトデザインの媒体なので絞る
   - name: manual
     color: "#9B9B9B"
     # 上のどれにも当たらない媒体・ビルダーの自社サイトを人が入れるとき
@@ -113,7 +133,7 @@ wordpress:
   # 承認したら自動で下書き → 空いている最短の枠へ予約（毎時の auto.yml。2026-09-30 ユーザー指定）
   # 止めるときは false
   auto_schedule: true
-  post_times: ["08:00"]         # 2026-09-30 ユーザー指定: 毎日 AM8時。数を増やすと1日の本数が増える
+  post_times: ["08:00", "12:00", "19:00"]  # 2026-10-03 ユーザー指定: 1日3本（最初は 08:00 の1本）
   slug_prefix: "yc-"
   # アイキャッチは元写真を WP に取り込む（既存記事と同じ。2026-09-28 ユーザー判断）
   upload_featured_image: true

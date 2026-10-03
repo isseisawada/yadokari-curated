@@ -1,0 +1,41 @@
+name: backfill
+
+# 過去記事（collect.backfill_since = 2023-01-01 以降）を、ソースごとに backfill_url のページを
+# めくって集め、採点まで済ませる（2026-10-03 ユーザー指定: 1日3本を目指して在庫を増やす）。
+# 毎日1回。取り切ったら新規0件で早く終わる。間隔3秒・直列・robots は収集と同じ。
+on:
+  schedule:
+    - cron: "23 13 * * *"   # 22:23 JST（daily とずらす）
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "1ソースあたり1回で入れる上限"
+        default: "60"
+
+concurrency:
+  group: backfill
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[postgres]"
+      - name: 過去記事を集める
+        run: python -m yadokari.cli collect --backfill --limit "${{ inputs.limit || '60' }}"
+      - name: 採点
+        run: python -m yadokari.cli score --limit 800
+      - name: 重複（別の媒体で同じ作品）
+        run: python -m yadokari.cli dedupe
+      - name: 1枚目（外観）を選ぶ
+        run: python -m yadokari.cli hero --limit 800
+      - name: 件数
+        run: python -m yadokari.cli stats

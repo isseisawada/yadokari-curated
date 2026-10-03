@@ -83,8 +83,8 @@ def _entry_html(entry) -> str:
     return body or entry.get("summary", "") or ""
 
 
-def read_feed(client: HttpClient, source: Source) -> list[Item]:
-    response = client.get(source.feed)
+def read_feed(client: HttpClient, source: Source, url: str | None = None) -> list[Item]:
+    response = client.get(url or source.feed)
     parsed = feedparser.parse(response.content)
     items = []
     for e in parsed.entries:
@@ -170,6 +170,13 @@ def collect_source(
         except (RobotsDisallowed, httpx.HTTPError) as exc:
             log.warning("%s: 一覧ページを読めませんでした（%s）: %s", source.name, index_url, exc)
 
+    _ingest(config, client, conn, source, items, cutoff, limit, stats, dry_run)
+    return stats
+
+
+def _ingest(config: Config, client: HttpClient, conn: DbConnection | None, source: Source,
+            items: list[Item], cutoff: datetime, limit: int, stats: SourceStats,
+            dry_run: bool) -> None:
     # 取得済みと古いものを先に落とし、それから上限で切る
     fresh: list[Item] = []
     for it in items:
@@ -234,6 +241,58 @@ def collect_source(
             stats.inserted_urls.append(it.url)
         else:
             stats.skipped_existing += 1
+
+
+
+
+def collect_backfill(
+    config: Config,
+    client: HttpClient,
+    conn: DbConnection | None,
+    source: Source,
+    limit: int,
+    dry_run: bool = False,
+) -> SourceStats:
+    """過去記事を backfill_url のページを順にめくって集める（collect.backfill_since 以降）。
+
+    取得済みは飛ばして次のページへ。新規が limit 件に達するか、ページが空になるか、
+    ページの記事が全部 since より古くなったら止める。間隔は HttpClient が守る（3秒・直列）。
+    """
+    stats = SourceStats(source=source.name)
+    if not source.backfill_url or source.manual_only:
+        return stats
+    since = datetime.fromisoformat(config.collect.backfill_since).replace(tzinfo=UTC)
+    as_index = bool(source.url_include) and "feed" not in source.backfill_url
+    seen: set[str] = set()
+    for page_no in range(1, config.collect.backfill_max_pages + 1):
+        url = source.backfill_url.format(page=page_no)
+        try:
+            page_items = (read_index(client, source, url) if as_index
+                          else read_feed(client, source, url))
+        except (RobotsDisallowed, httpx.HTTPError) as exc:
+            log.warning("%s: バックフィルのページを読めませんでした（%s）: %s", source.name, url, exc)
+            break
+        page_items = [it for it in page_items if it.url not in seen]
+        if not page_items:
+            break
+        seen.update(it.url for it in page_items)
+        if as_index:
+            stats.index_items += len(page_items)
+        else:
+            stats.feed_items += len(page_items)
+        dated = [it for it in page_items if it.published_at]
+        all_old = bool(dated) and len(dated) == len(page_items) and all(
+            _too_old(it, since) for it in page_items)
+        inserted_before, old_before = stats.inserted, stats.skipped_old
+        _ingest(config, client, conn, source, page_items, since, limit - stats.inserted,
+                stats, dry_run)
+        # 一覧ページ（日付が無い）は新しい順に並ぶので、記事を取って since より古いものが出て、
+        # そのページで1件も入らなかったら、それより後ろのページも古いとみなして止める
+        page_old = stats.skipped_old - old_before
+        if all_old or (as_index and page_old > 0 and stats.inserted == inserted_before):
+            break
+        if stats.inserted >= limit:
+            break
     return stats
 
 
@@ -243,6 +302,7 @@ def collect_all(
     names: list[str] | None = None,
     limit: int | None = None,
     dry_run: bool = False,
+    backfill: bool = False,
 ) -> list[SourceStats]:
     """ソースを順番に回す。**並列にしない**（レート制限はプロセス内のドメイン単位）。"""
     results = []
@@ -252,7 +312,14 @@ def collect_all(
                 continue
             if (not source.enabled and not names) or source.manual_only:
                 continue
-            stats = collect_source(config, client, conn, source, limit=limit, dry_run=dry_run)
+            if backfill:
+                if not source.backfill_url:
+                    continue
+                stats = collect_backfill(config, client, conn, source,
+                                         limit=limit or config.collect.per_source_limit,
+                                         dry_run=dry_run)
+            else:
+                stats = collect_source(config, client, conn, source, limit=limit, dry_run=dry_run)
             log.info(stats.summary())
             results.append(stats)
     return results
