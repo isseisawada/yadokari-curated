@@ -72,14 +72,56 @@
   .quick details.rej[open] form { margin-top:8px; display:grid; gap:6px; }
   .quick details.rej select, .quick details.rej input { font-size:13px; padding:6px 8px; }
   .quick-msg { flex-basis:100%; margin:0; }
-  /* まとめて承認・非承認（2026-10-03） */
-  .bulk { position:sticky; top:0; z-index:5; background:#fff; display:flex; flex-wrap:wrap; gap:8px 12px;
-          align-items:center; padding:10px 0; margin-bottom:12px; border-bottom:1px solid #eee; font-size:13px; }
-  .bulk select { font-size:13px; padding:5px 8px; width:auto !important; max-width:60%; }
+  /* まとめて承認・非承認（2026-10-03）
+     上: 「すべて選ぶ」。カード: 写真右上の丸いチェック。1件でも選ぶと画面下に黒い操作バーが出て付いてくる */
+  .seltop { display:flex; align-items:center; gap:16px; margin:0 0 24px; flex-wrap:wrap; }
+  .seltop .selall { font-size:13px; padding:6px 20px; }
   .card { position:relative; }
-  .card .pick { position:absolute; top:8px; right:8px; z-index:2; background:rgba(255,255,255,.9);
-                border-radius:6px; padding:4px 6px; line-height:1; }
-  .card .pick input { width:20px; height:20px; margin:0; }
+  .card .pick { position:absolute; top:10px; right:10px; z-index:2; margin:0; cursor:pointer; }
+  .card .pick input { position:absolute; opacity:0; width:1px; height:1px; }
+  .card .pick span { display:block; width:30px; height:30px; border-radius:50%; background:rgba(0,0,0,.28);
+                     border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.25); transition:background .15s, transform .15s; }
+  .card .pick:hover span { background:rgba(0,0,0,.45); }
+  .card .pick input:checked + span { background:var(--blue) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/18px no-repeat; transform:scale(1.06); }
+  .card .pick input:focus-visible + span { outline:3px solid var(--blue); outline-offset:2px; }
+  .card.picked .ph { outline:3px solid var(--blue); outline-offset:-3px; }
+  .selbar { position:fixed; left:50%; bottom:24px; z-index:20; width:min(760px, calc(100% - 32px)); margin:0;
+            transform:translate(-50%, 140%); opacity:0; pointer-events:none;
+            transition:transform .25s ease, opacity .2s ease; }
+  .selbar.show { transform:translate(-50%, 0); opacity:1; pointer-events:auto; }
+  .selbar-in { background:#000; color:#fff; border-radius:999px; padding:10px 10px 10px 28px;
+               display:flex; align-items:center; gap:16px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+  .selbar-n { margin:0; white-space:nowrap; font-size:14px; font-weight:700; }
+  .selbar-n b { font:800 22px "Inter",sans-serif; margin-right:4px; vertical-align:-1px; }
+  .selbar-acts { display:flex; align-items:center; gap:10px; margin-left:auto; }
+  .selbar button { font-size:14px; padding:9px 22px; border:0; white-space:nowrap; flex:none; }
+  .selbar .sb-approve { background:var(--blue); color:#fff; }
+  .selbar .sb-approve:hover { background:#2b5bff; }
+  .sb-rej { display:flex; align-items:center; background:#222; border-radius:999px; padding:3px 3px 3px 14px; gap:6px; }
+  .sb-rej select { width:auto; max-width:200px; background:transparent; color:#fff; border:0; font-size:13px; padding:6px 4px; }
+  .sb-rej select option { color:#000; }
+  .selbar .sb-reject { background:var(--red); color:#fff; padding:8px 18px; }
+  .selbar .sb-reject:hover { background:#f2675d; }
+  .selbar .sb-clear { background:transparent; color:#fff; width:38px; height:38px; padding:0; font-size:20px; line-height:1; }
+  .selbar .sb-clear:hover { background:#222; }
+  .selbar-msg { margin:8px 0 0; text-align:center; font-size:13px; font-weight:700; color:var(--red);
+                text-shadow:0 0 6px #fff, 0 0 2px #fff; min-height:0; }
+  .selbar-msg:empty { display:none; }
+  body.selecting main { padding-bottom:160px; }
+  .toast { position:fixed; left:50%; bottom:24px; transform:translate(-50%, 20px); z-index:21; background:#000; color:#fff;
+           font-size:14px; font-weight:700; padding:12px 24px; border-radius:999px; opacity:0; pointer-events:none;
+           transition:opacity .2s, transform .2s; }
+  .toast.show { opacity:1; transform:translate(-50%, 0); }
+  body.selecting .toast { bottom:100px; }
+  @media (max-width: 760px) {
+    .selbar { bottom:12px; width:calc(100% - 24px); }
+    .selbar-in { border-radius:18px; padding:12px 12px 12px 18px; flex-wrap:wrap; gap:10px; }
+    .selbar-acts { margin-left:0; width:100%; order:3; }
+    .selbar .sb-approve { flex:0 0 auto; }
+    .sb-rej { flex:1 1 auto; min-width:0; }
+    .sb-rej select { flex:1 1 auto; max-width:none; min-width:0; }
+    .selbar .sb-clear { margin-left:auto; }
+  }
   /* 承認のメモ（2026-10-03）。目立たせない */
   details.memo { margin-top:6px; font-size:12px; color:#888; }
   details.memo summary { cursor:pointer; list-style:none; }

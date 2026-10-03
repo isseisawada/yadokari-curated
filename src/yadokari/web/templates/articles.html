@@ -16,14 +16,26 @@
 {% block body %}
 {% set here = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}
 {% if status == 'scored' %}
-<form id="bulk" method="post" action="/articles/bulk" class="bulk">
+<div class="seltop">
+  <button type="button" class="selall" id="bulk-all" aria-pressed="false">すべて選ぶ</button>
+  <span class="muted">写真右上の ○ で選ぶと、まとめて承認・非承認できます</span>
+</div>
+<form id="bulk" method="post" action="/articles/bulk" class="selbar" aria-live="polite">
   <input type="hidden" name="next" value="{{ here }}">
-  <label class="muted"><input type="checkbox" id="bulk-all"> すべて選ぶ</label>
-  <span class="muted"><b id="bulk-n">0</b>件を選択中</span>
-  <button name="decision" value="approved" class="approve small">まとめて承認</button>
-  <select name="tag"><option value="">非承認の理由</option>{% for t in tags %}<option>{{ t }}</option>{% endfor %}</select>
-  <button name="decision" value="rejected" class="reject small">まとめて非承認</button>
-  <span id="bulk-msg" class="muted"></span>
+  <div class="selbar-in">
+    <p class="selbar-n"><b id="bulk-n">0</b><span>件を選択中</span></p>
+    <div class="selbar-acts">
+      <button type="submit" name="decision" value="approved" class="sb-approve">まとめて承認</button>
+      <div class="sb-rej">
+        <select name="tag" aria-label="非承認の理由">
+          <option value="">理由を選ぶ…</option>{% for t in tags %}<option>{{ t }}</option>{% endfor %}
+        </select>
+        <button type="submit" name="decision" value="rejected" class="sb-reject">非承認</button>
+      </div>
+    </div>
+    <button type="button" class="sb-clear" id="bulk-clear" aria-label="選択を解除">×</button>
+  </div>
+  <p class="selbar-msg" id="bulk-msg"></p>
 </form>
 {% endif %}
 <div class="cards">
@@ -32,7 +44,7 @@
   {% set thumb = r['hero_image'] or r['og_image'] %}
   <div class="card" id="card-{{ r['id'] }}">
     {% if r['status'] == 'scored' and not r['duplicate_of'] %}
-    <label class="pick"><input type="checkbox" form="bulk" name="ids" value="{{ r['id'] }}" class="js-pick"></label>
+    <label class="pick" title="選ぶ"><input type="checkbox" form="bulk" name="ids" value="{{ r['id'] }}" class="js-pick"><span></span></label>
     {% endif %}
     <a class="card-link" href="/articles/{{ r['id'] }}">
       <div class="ph">
@@ -80,31 +92,48 @@
   <p class="muted">ありません。</p>
 {% endfor %}
 </div>
+<div id="toast" class="toast" role="status"></div>
 <script>
-// まとめて承認・非承認（2026-10-03）。チェックした件数を出し、送ったらカードを消す
+// まとめて承認・非承認（2026-10-03）。1件でも選ぶと、下に操作バーが出てスクロールに付いてくる
 (function () {
   var bulk = document.getElementById("bulk");
   if (!bulk) return;
+  var all = document.getElementById("bulk-all"), msg = document.getElementById("bulk-msg");
   var picks = function () { return Array.prototype.slice.call(document.querySelectorAll("input.js-pick")); };
-  var count = function () { document.getElementById("bulk-n").textContent = picks().filter(function (c) { return c.checked; }).length; };
-  document.addEventListener("change", function (e) { if (e.target.classList.contains("js-pick")) count(); });
-  document.getElementById("bulk-all").addEventListener("change", function (e) {
-    picks().forEach(function (c) { c.checked = e.target.checked; }); count();
-  });
+  var sync = function () {
+    var on = picks().filter(function (c) { return c.checked; });
+    document.getElementById("bulk-n").textContent = on.length;
+    bulk.classList.toggle("show", on.length > 0);
+    document.body.classList.toggle("selecting", on.length > 0);
+    picks().forEach(function (c) { c.closest(".card").classList.toggle("picked", c.checked); });
+    var every = picks().length > 0 && on.length === picks().length;
+    all.textContent = every ? "選択を解除" : "すべて選ぶ";
+    all.setAttribute("aria-pressed", every ? "true" : "false");
+  };
+  var setAll = function (v) { picks().forEach(function (c) { c.checked = v; }); sync(); };
+  document.addEventListener("change", function (e) { if (e.target.classList.contains("js-pick")) { msg.textContent = ""; sync(); } });
+  all.addEventListener("click", function () { setAll(all.getAttribute("aria-pressed") !== "true"); });
+  document.getElementById("bulk-clear").addEventListener("click", function () { setAll(false); });
   bulk.addEventListener("submit", function (ev) {
     ev.preventDefault();
-    var btn = ev.submitter, fd = new FormData(bulk), msg = document.getElementById("bulk-msg");
+    var btn = ev.submitter, fd = new FormData(bulk);
     if (btn) fd.append(btn.name, btn.value);
-    if (!fd.getAll("ids").length) { msg.textContent = "記事を選んでください"; return; }
+    if (btn && btn.value === "rejected" && !fd.get("tag")) {
+      msg.textContent = "非承認の理由を選んでください"; bulk.querySelector("select").focus(); return;
+    }
     bulk.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
     fetch(bulk.action, { method: "POST", body: fd, headers: { "X-Requested-With": "fetch" } })
       .then(function (res) { return res.json(); })
       .then(function (j) {
-        msg.textContent = j.ok ? j.message : j.error;
+        if (!j.ok) { msg.textContent = j.error; return; }
         (j.done || []).forEach(function (id) { var c = document.getElementById("card-" + id); if (c) c.remove(); });
-        document.getElementById("bulk-all").checked = false; count();
+        bulk.querySelector("select").value = "";
+        sync();
+        var t = document.getElementById("toast");
+        t.textContent = j.message; t.classList.add("show");
+        setTimeout(function () { t.classList.remove("show"); }, 2600);
       })
-      .catch(function () { msg.textContent = "送れませんでした"; })
+      .catch(function () { msg.textContent = "送れませんでした。もう一度押してください"; })
       .finally(function () { bulk.querySelectorAll("button").forEach(function (b) { b.disabled = false; }); });
   });
 })();
