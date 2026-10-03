@@ -165,7 +165,7 @@ def test_next_free_slot_skips_taken_and_too_soon(config):
     assert next_free_slot(config, {first.isoformat()}, now) == datetime(2026, 10, 2, 23, 0, tzinfo=UTC)
 
 
-def test_three_posts_a_day_from_2027(config):
+def test_two_posts_a_day_from_2027(config):
     now = datetime(2026, 12, 31, 0, 0, tzinfo=UTC)  # JST 12/31 09:00
     taken: set[str] = set()
     slots = []
@@ -173,9 +173,9 @@ def test_three_posts_a_day_from_2027(config):
         s = next_free_slot(config, taken, now)
         taken.add(s.isoformat())
         slots.append(s)
-    # 12/31 は 08:00 だけ（もう過ぎている）→ 1/1 は 08:00・12:00・19:00、そのあと 1/2 08:00
-    assert slots == [datetime(2026, 12, 31, 23, 0, tzinfo=UTC), datetime(2027, 1, 1, 3, 0, tzinfo=UTC),
-                     datetime(2027, 1, 1, 10, 0, tzinfo=UTC), datetime(2027, 1, 1, 23, 0, tzinfo=UTC)]
+    # 1/1 から 08:00・19:00 JST の2本（2026-10-03 ユーザー指定）
+    assert slots == [datetime(2026, 12, 31, 23, 0, tzinfo=UTC), datetime(2027, 1, 1, 10, 0, tzinfo=UTC),
+                     datetime(2027, 1, 1, 23, 0, tzinfo=UTC), datetime(2027, 1, 2, 10, 0, tzinfo=UTC)]
 
 
 def test_more_post_times_means_more_posts_per_day(config):
