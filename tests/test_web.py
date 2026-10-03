@@ -120,6 +120,6 @@ def test_bulk_approve_and_reject(env):
 
 def test_select_all_is_hidden_when_nothing_to_review(env):
     c, conn, _ = env
-    assert "すべて選ぶ" not in c.get("/articles").text
+    assert 'id="bulk-all"' not in c.get("/articles").text
     add_article(conn, url="https://t.com/x", score=80)
-    assert "すべて選ぶ" in c.get("/articles").text
+    assert 'id="bulk-all"' in c.get("/articles").text
