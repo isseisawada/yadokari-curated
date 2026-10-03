@@ -14,7 +14,7 @@ import anthropic
 from yadokari.collect.page import upgrade_image_url
 from yadokari.config import Config
 from yadokari.db.connection import DbConnection, Row
-from yadokari.db.repository import get_article, save_draft
+from yadokari.db.repository import approval_note, get_article, save_draft
 from yadokari.drafting.numbers import unsupported_numbers
 from yadokari.drafting.prompt import SCHEMA, build_source, build_user, system_prompt
 from yadokari.drafting.render import (
@@ -111,7 +111,7 @@ def fix_description(config: Config, client, parts: DraftParts, keyword: str,
     return parts
 
 
-def generate(config: Config, row: Row, client=None) -> Draft:
+def generate(config: Config, row: Row, client=None, direction: str = "") -> Draft:
     d = config.drafting
     seo = config.seo
     assessment = json.loads(row["assessment"]) if row["assessment"] else None
@@ -124,7 +124,8 @@ def generate(config: Config, row: Row, client=None) -> Draft:
 
     client = client or make_client(config.anthropic_api_key)
     system = system_prompt(seo.description_min, seo.description_max)
-    messages: list[dict] = [{"role": "user", "content": build_user(source, d.target_chars, keyword)}]
+    messages: list[dict] = [{"role": "user",
+                              "content": build_user(source, d.target_chars, keyword, direction)}]
     parts: DraftParts | None = None
     stray: set[str] = set()
     for attempt in range(2):
@@ -187,7 +188,7 @@ def generate_for(config: Config, conn: DbConnection, article_id: int, client=Non
         raise KeyError(f"記事 {article_id} がありません")
     if row["status"] != "approved":
         raise ValueError("承認済みの記事だけ下書きにできます")
-    draft = generate(config, row, client=client)
+    draft = generate(config, row, client=client, direction=approval_note(conn, article_id))
     draft_id = save_draft(
         conn, article_id, title=draft.title, excerpt=draft.excerpt, body_html=draft.body_html,
         tags=draft.tags, featured_image=draft.featured_image, warnings=draft.warnings,

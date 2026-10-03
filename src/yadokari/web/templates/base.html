@@ -72,6 +72,12 @@
   .quick details.rej[open] form { margin-top:8px; display:grid; gap:6px; }
   .quick details.rej select, .quick details.rej input { font-size:13px; padding:6px 8px; }
   .quick-msg { flex-basis:100%; margin:0; }
+  /* 承認のメモ（2026-10-03）。目立たせない */
+  details.memo { margin-top:6px; font-size:12px; color:#888; }
+  details.memo summary { cursor:pointer; list-style:none; }
+  details.memo summary::-webkit-details-marker { display:none; }
+  details.memo textarea { margin-top:6px; width:100%; min-height:56px; font-size:13px; }
+  .quick form:first-child { display:flex; flex-direction:column; align-items:flex-start; }
   .btn, button { font:700 15px "Inter","Noto Sans JP",sans-serif; padding:10px 28px; border:1px solid var(--ink); background:#fff; color:var(--ink); border-radius:50px; cursor:pointer; text-decoration:none; display:inline-block; }
   button:hover { background:var(--band); }
   button.approve { background:var(--blue); border-color:var(--blue); color:#fff; }

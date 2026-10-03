@@ -52,6 +52,9 @@
     <form method="post" action="/articles/{{ a['id'] }}/decide">
       <input type="hidden" name="decision" value="approved">
       <button class="approve">承認する</button>
+      <details class="memo"><summary>メモ（記事の方向性・任意）</summary>
+        <textarea name="reason" placeholder="この方向性で下書きを書きます。例: 小さな家ではないが、村ごと自給する暮らし方として紹介"></textarea>
+      </details>
     </form>
     <form method="post" action="/articles/{{ a['id'] }}/decide" style="margin-top:20px">
       <input type="hidden" name="decision" value="rejected">

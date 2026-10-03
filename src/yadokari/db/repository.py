@@ -132,6 +132,15 @@ def decide(conn: DbConnection, article_id: int, decision: str, reason: str | Non
     )
 
 
+def approval_note(conn: DbConnection, article_id: int) -> str:
+    """承認したときのメモ（記事の方向性）。最後の承認のもの。無ければ空文字。2026-10-03"""
+    row = conn.execute(
+        "SELECT reason FROM feedback WHERE article_id = ? AND decision = 'approved'"
+        " ORDER BY id DESC LIMIT 1", (article_id,),
+    ).fetchone()
+    return (row["reason"] or "").strip() if row else ""
+
+
 def reset_to_scored(conn: DbConnection, article_id: int) -> None:
     """審査を取り消す（押し間違い用）。送信前の下書きは消す。"""
     pushed = conn.execute(

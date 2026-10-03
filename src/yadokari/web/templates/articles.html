@@ -44,6 +44,9 @@
         <input type="hidden" name="decision" value="approved">
         <input type="hidden" name="next" value="{{ here }}">
         <button class="approve small">承認</button>
+        <details class="memo"><summary>メモ</summary>
+          <textarea name="reason" placeholder="記事の方向性（任意）。例: 小屋ではないが、廃材の再利用の視点で"></textarea>
+        </details>
       </form>
       <details class="rej">
         <summary class="btn small">非承認…</summary>
