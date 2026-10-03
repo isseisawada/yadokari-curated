@@ -143,3 +143,62 @@ def test_source_lookback_overrides_default(config, db):
     old = NOW - timedelta(days=config.collect.lookback_days + 60)
     pages = {"https://t.com/feed": _rss([("Old", "https://t.com/old", old)]), "https://t.com/old": _article()}
     assert collect_source(config, FakeClient(pages), db, src).inserted == 1
+
+
+def test_backfill_pages_through_feed_until_older_than_since(config, db):
+    """過去記事: ?paged=N をめくり、since（2023-01-01）より古いページで止まる。"""
+    from yadokari.collect.runner import collect_backfill
+
+    config.collect.backfill_since = "2023-01-01"
+    src = Source(name="t", feed="https://t.com/feed", backfill_url="https://t.com/feed?paged={page}")
+    d24, d22 = datetime(2024, 5, 1, tzinfo=UTC), datetime(2022, 6, 1, tzinfo=UTC)
+    pages = {
+        "https://t.com/feed?paged=1": _rss([("A", "https://t.com/a", d24)]),
+        "https://t.com/feed?paged=2": _rss([("B", "https://t.com/b", d24)]),
+        "https://t.com/feed?paged=3": _rss([("C", "https://t.com/c", d22)]),
+        "https://t.com/a": _article(), "https://t.com/b": _article(), "https://t.com/c": _article(),
+    }
+    client = FakeClient(pages)
+    st = collect_backfill(config, client, db, src, limit=10)
+    assert st.inserted == 2
+    assert "https://t.com/feed?paged=4" not in client.requested
+    assert "https://t.com/c" not in client.requested  # 古いものは記事ページも取らない
+
+
+def test_backfill_skips_existing_and_respects_limit(config, db):
+    from yadokari.collect.runner import collect_backfill
+
+    src = Source(name="t", feed="https://t.com/feed", backfill_url="https://t.com/feed?paged={page}")
+    d = datetime(2024, 5, 1, tzinfo=UTC)
+    pages = {
+        "https://t.com/feed?paged=1": _rss([("A", "https://t.com/a", d), ("B", "https://t.com/b", d)]),
+        "https://t.com/feed?paged=2": _rss([("C", "https://t.com/c", d)]),
+        "https://t.com/feed?paged=3": _rss([]),
+        "https://t.com/a": _article(), "https://t.com/b": _article(), "https://t.com/c": _article(),
+    }
+    assert collect_backfill(config, FakeClient(pages), db, src, limit=1).inserted == 1
+    st = collect_backfill(config, FakeClient(pages), db, src, limit=10)
+    assert st.inserted == 2 and st.skipped_existing == 1
+
+
+def test_backfill_index_stops_when_articles_get_old(config, db):
+    """一覧ページ（日付なし）: 記事を取って since より古いものだけのページで止まる。"""
+    from yadokari.collect.runner import collect_backfill
+
+    config.collect.backfill_since = "2023-01-01"
+    src = Source(name="t", index_urls=["https://t.com/list"], url_include=r"^https://t\.com/p/\d+$",
+                 backfill_url="https://t.com/list?page={page}")
+
+    def art(year):
+        return (f"<html><head><meta property='article:published_time' content='{year}-03-01T00:00:00Z'>"
+                f"</head><body><article>{BODY}</article></body></html>")
+
+    pages = {
+        "https://t.com/list?page=1": "<a href='/p/1'>1</a><a href='/p/2'>2</a>",
+        "https://t.com/list?page=2": "<a href='/p/3'>3</a>",
+        "https://t.com/p/1": art(2025), "https://t.com/p/2": art(2024), "https://t.com/p/3": art(2021),
+    }
+    client = FakeClient(pages)
+    st = collect_backfill(config, client, db, src, limit=10)
+    assert st.inserted == 2
+    assert "https://t.com/list?page=3" not in client.requested

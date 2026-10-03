@@ -92,6 +92,9 @@ class Source(BaseModel):
     # ArchDaily の cabins 一覧は少し前の作品も並ぶ。既存記事も数年前の作品を紹介している
     lookback_days: int | None = None
     note: str | None = None
+    # 過去記事のバックフィル（collect --backfill）。{page} にページ番号（1から）を入れた URL。
+    # フィード（WordPress の ?paged=）か一覧ページ（url_include で記事リンクを拾う）。2026-10-03
+    backfill_url: str | None = None
     # 審査画面のラベルの色（#RRGGBB）。媒体の雰囲気に合わせる。未指定ならグレー
     color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
 
@@ -110,6 +113,10 @@ class CollectConfig(BaseModel):
     lookback_days: int = 30
     per_source_limit: int = 20
     min_text_chars: int = 400
+    # バックフィルで遡る下限の日付（これより前の記事は取らない）。2026-10-03 ユーザー指定: 2023年1月以降
+    backfill_since: str = "2023-01-01"
+    # バックフィルで1ソースあたり何ページまで見るか（止まらないときの保険）
+    backfill_max_pages: int = 80
 
 
 class Weights(BaseModel):

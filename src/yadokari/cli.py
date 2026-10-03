@@ -1,7 +1,7 @@
 """コマンド。
 
     python -m yadokari.cli db migrate
-    python -m yadokari.cli collect [--source archdaily] [--limit 5] [--dry-run]
+    python -m yadokari.cli collect [--source archdaily] [--limit 5] [--dry-run] [--backfill]
     python -m yadokari.cli score [--limit 40]
     python -m yadokari.cli hero [--limit 60]
     python -m yadokari.cli dedupe
@@ -51,7 +51,8 @@ def _cmd_collect(cfg, args) -> int:
         ensure_migrated(cfg.app.target())
         conn = connect(cfg.app.target())
     try:
-        results = collect_all(cfg, conn, names=args.source, limit=args.limit, dry_run=args.dry_run)
+        results = collect_all(cfg, conn, names=args.source, limit=args.limit, dry_run=args.dry_run,
+                              backfill=args.backfill)
     finally:
         if conn is not None:
             conn.close()
@@ -370,6 +371,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--source", action="append", help="ソース名（複数可）。省略時は全部")
     p.add_argument("--limit", type=int, default=None, help="1ソースあたりの上限")
     p.add_argument("--dry-run", action="store_true", help="DB に書かずに何が入るかだけ見る")
+    p.add_argument("--backfill", action="store_true",
+                   help="過去記事を backfill_url のページをめくって集める（collect.backfill_since 以降）")
     p.set_defaults(func=_cmd_collect)
 
     p = sub.add_parser("score", help="未採点の記事を採点する")

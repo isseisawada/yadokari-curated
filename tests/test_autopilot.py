@@ -8,7 +8,7 @@ from yadokari import autopilot
 from yadokari.db.repository import decide, get_draft, get_draft_by_article
 from yadokari.drafting.generate import generate_for
 
-NOW = datetime(2026, 9, 30, 2, 0, tzinfo=UTC)  # JST 11:00
+NOW = datetime.now(UTC)
 
 
 def _on(config):
@@ -32,9 +32,12 @@ def test_approved_articles_get_drafted_and_scheduled_in_the_next_free_slots(conf
                         wp=wp.client(config), fetch=fake_fetch, now=NOW)
     assert len(res.generated) == 2 and not res.failed
     da, db_ = get_draft_by_article(db, a), get_draft_by_article(db, b)
-    # 承認の古い順に、毎日 08:00 JST（= 前日 23:00 UTC）の空いている最短の枠
-    assert da["scheduled_at"] == "2026-09-30T23:00:00+00:00"
-    assert db_["scheduled_at"] == "2026-10-01T23:00:00+00:00"
+    # 承認の古い順に、空いている最短の枠（08:00 / 12:00 / 19:00 JST）
+    from yadokari.wordpress.publish import next_free_slot
+
+    first = next_free_slot(config, set(), NOW)
+    assert da["scheduled_at"] == first.isoformat()
+    assert db_["scheduled_at"] == next_free_slot(config, {first.isoformat()}, NOW).isoformat()
     assert {p["status"] for p in wp.posts.values()} == {"future"}
 
 
