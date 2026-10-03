@@ -202,3 +202,12 @@ def test_backfill_index_stops_when_articles_get_old(config, db):
     st = collect_backfill(config, client, db, src, limit=10)
     assert st.inserted == 2
     assert "https://t.com/list?page=3" not in client.requested
+
+
+def test_naive_published_time_is_treated_as_utc():
+    """2026-10-03: New Atlas のページの公開日時にタイムゾーンが無く、比較で落ちた。"""
+    from yadokari.collect.runner import Item, _too_old
+
+    cutoff = datetime(2023, 1, 1, tzinfo=UTC)
+    assert _too_old(Item(url="u", published_at="2022-05-01T10:00:00"), cutoff)
+    assert not _too_old(Item(url="u", published_at="2024-05-01T10:00:00"), cutoff)
