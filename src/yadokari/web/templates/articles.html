@@ -15,10 +15,10 @@
 {% endblock %}
 {% block body %}
 {% set here = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}
-{% if status == 'scored' %}
-<div class="seltop">
+{% set pickable = rows|selectattr('status', 'equalto', 'scored')|rejectattr('duplicate_of')|list %}
+{% if status == 'scored' and pickable %}
+<div class="seltop" id="seltop">
   <button type="button" class="selall" id="bulk-all" aria-pressed="false">すべて選ぶ</button>
-  <span class="muted">写真右上の ○ で選ぶと、まとめて承認・非承認できます</span>
 </div>
 <form id="bulk" method="post" action="/articles/bulk" class="selbar" aria-live="polite">
   <input type="hidden" name="next" value="{{ here }}">
@@ -106,6 +106,7 @@
     bulk.classList.toggle("show", on.length > 0);
     document.body.classList.toggle("selecting", on.length > 0);
     picks().forEach(function (c) { c.closest(".card").classList.toggle("picked", c.checked); });
+    document.getElementById("seltop").hidden = picks().length === 0;
     var every = picks().length > 0 && on.length === picks().length;
     all.textContent = every ? "選択を解除" : "すべて選ぶ";
     all.setAttribute("aria-pressed", every ? "true" : "false");
