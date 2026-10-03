@@ -110,8 +110,18 @@ def system_prompt(desc_min: int, desc_max: int) -> str:
     return SYSTEM.replace("{desc_min}", str(desc_min)).replace("{desc_max}", str(desc_max))
 
 
-def build_user(source: str, target_chars: int, keyword: str = "タイニーハウス") -> str:
+def build_user(source: str, target_chars: int, keyword: str = "タイニーハウス",
+               direction: str = "") -> str:
+    note = ""
+    if direction:
+        # 承認したときのメモ（2026-10-03 ユーザー指定）。小さな家・動く家から少し外れる記事もある
+        note = (
+            "編集部からの方向性（この切り口で書く。資料に無い事実は足さない。"
+            "題材が小さな家・動く家そのものでなくても、無理にそう書かない）:\n"
+            f"{direction}\n\n"
+        )
     return (
         f"主キーワード: {keyword}\n"
+        f"{note}"
         f"次の資料から、本文{target_chars}字前後の下書きを書いてください。\n\n{source}"
     )

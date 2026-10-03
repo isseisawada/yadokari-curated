@@ -145,3 +145,21 @@ def test_description_rewrite_with_new_numbers_is_ignored(config, db):
     d = get_draft(db, generate_for(config, db, article_id, client=llm))
     assert d["excerpt"] == long["description"]
     assert len(llm.calls) == 3
+
+
+def test_approval_memo_steers_the_draft(config, db):
+    """承認のメモ（記事の方向性）が下書きの指示に入る（2026-10-03）。"""
+    article_id = add_article(db)
+    decide(db, article_id, "approved", reason="小屋ではないが、廃材の再利用の視点で")
+    db.commit()
+    llm = FakeLLM(draft_json())
+    generate_for(config, db, article_id, client=llm)
+    prompt = llm.calls[0]["messages"][0]["content"]
+    assert "編集部からの方向性" in prompt and "廃材の再利用の視点で" in prompt
+
+
+def test_no_memo_no_direction(config, db):
+    article_id = add_article(db, status="approved")
+    llm = FakeLLM(draft_json())
+    generate_for(config, db, article_id, client=llm)
+    assert "編集部からの方向性" not in llm.calls[0]["messages"][0]["content"]
