@@ -91,3 +91,28 @@ def test_rules_page_and_approval(env):
     c.post("/rules/1", data={"state": "approved", "proposal": "直したルール"})
     row = conn.execute("SELECT * FROM rule_candidates").fetchone()
     assert (row["state"], row["proposal"]) == ("approved", "直したルール")
+
+
+def test_bulk_approve_and_reject(env):
+    """一覧でチェックしたものをまとめて承認・非承認（2026-10-03）。非承認はタグが要る。"""
+    c, conn, _ = env
+    a = add_article(conn, url="https://t.com/1", score=80)
+    b = add_article(conn, url="https://t.com/2", score=80)
+    d = add_article(conn, url="https://t.com/3", score=80)
+    html = c.get("/articles").text
+    assert 'name="ids"' in html and "まとめて承認" in html
+
+    r = c.post("/articles/bulk", data={"ids": [str(a), str(b)], "decision": "approved"},
+               headers={"X-Requested-With": "fetch"})
+    assert r.json()["ok"] and sorted(r.json()["done"]) == sorted([a, b])
+    st = {row["id"]: row["status"] for row in conn.execute("SELECT id, status FROM articles")}
+    assert st[a] == st[b] == "approved" and st[d] == "scored"
+
+    r = c.post("/articles/bulk", data={"ids": [str(d)], "decision": "rejected"},
+               headers={"X-Requested-With": "fetch"})
+    assert r.status_code == 400  # 理由のタグが無い
+    r = c.post("/articles/bulk", data={"ids": [str(d)], "decision": "rejected", "tag": "デザインが弱い"},
+               headers={"X-Requested-With": "fetch"})
+    assert r.json()["done"] == [d]
+    row = conn.execute("SELECT status FROM articles WHERE id = ?", (d,)).fetchone()
+    assert row["status"] == "rejected"

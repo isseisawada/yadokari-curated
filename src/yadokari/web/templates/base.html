@@ -72,6 +72,14 @@
   .quick details.rej[open] form { margin-top:8px; display:grid; gap:6px; }
   .quick details.rej select, .quick details.rej input { font-size:13px; padding:6px 8px; }
   .quick-msg { flex-basis:100%; margin:0; }
+  /* まとめて承認・非承認（2026-10-03） */
+  .bulk { position:sticky; top:0; z-index:5; background:#fff; display:flex; flex-wrap:wrap; gap:8px 12px;
+          align-items:center; padding:10px 0; margin-bottom:12px; border-bottom:1px solid #eee; font-size:13px; }
+  .bulk select { font-size:13px; padding:5px 8px; width:auto !important; max-width:60%; }
+  .card { position:relative; }
+  .card .pick { position:absolute; top:8px; right:8px; z-index:2; background:rgba(255,255,255,.9);
+                border-radius:6px; padding:4px 6px; line-height:1; }
+  .card .pick input { width:20px; height:20px; margin:0; }
   /* 承認のメモ（2026-10-03）。目立たせない */
   details.memo { margin-top:6px; font-size:12px; color:#888; }
   details.memo summary { cursor:pointer; list-style:none; }

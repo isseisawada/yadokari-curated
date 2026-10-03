@@ -197,6 +197,48 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
             return back(f"/articles/{article_id}", msg=f"{label}しました。下書きを作れます")
         return back(f"/articles/{nxt}" if nxt else "/articles", msg=f"{label}しました")
 
+    @app.post("/articles/bulk")
+    async def bulk_decide(request: Request):
+        """一覧でチェックしたものをまとめて承認・非承認（2026-10-03 ユーザー指定）。
+        非承認は理由のタグが要る（学習ループの入力）。WP に送ったものなど、できなかったものは数えて返す。"""
+        form = await request.form()
+        ids = [int(x) for x in form.getlist("ids") if str(x).isdigit()]
+        decision = str(form.get("decision") or "")
+        tag = str(form.get("tag") or "")
+        reason = str(form.get("reason") or "")
+        nxt = str(form.get("next") or "/articles")
+        if not nxt.startswith("/articles") or "//" in nxt:
+            nxt = "/articles"
+        wants_json = request.headers.get("x-requested-with") == "fetch"
+
+        def fail(msg: str):
+            if wants_json:
+                return JSONResponse({"ok": False, "error": msg}, status_code=400)
+            return back(nxt, err=msg)
+
+        if decision not in ("approved", "rejected"):
+            return fail("承認か非承認を選んでください")
+        if not ids:
+            return fail("記事を選んでください")
+        if decision == "rejected" and not (tag or reason.strip()):
+            return fail("まとめて非承認にするときは理由のタグを選んでください（学習ループの入力になります）")
+        done: list[int] = []
+        skipped: list[str] = []
+        with db() as conn:
+            for article_id in ids:
+                try:
+                    repo.decide(conn, article_id, decision, reason=reason, tag=tag or None)
+                    conn.commit()
+                    done.append(article_id)
+                except ValueError as exc:
+                    conn.rollback()
+                    skipped.append(f"#{article_id}: {exc}")
+        label = "承認" if decision == "approved" else "非承認"
+        msg = f"{len(done)}件を{label}しました" + (f"（{len(skipped)}件はできませんでした）" if skipped else "")
+        if wants_json:
+            return JSONResponse({"ok": True, "message": msg, "done": done, "skipped": skipped})
+        return back(nxt, msg=msg)
+
     @app.post("/articles/{article_id}/hero")
     def choose_hero(article_id: int, url: str = Form(...)):
         """1枚目（外観）を人が選び直す。自動で選んだものが外れていたとき用。"""
