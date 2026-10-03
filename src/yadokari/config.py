@@ -177,6 +177,8 @@ class WordPressConfig(BaseModel):
     auto_schedule: bool = False
     # 既定の公開時刻（JST）と1日の本数
     post_times: list[str] = ["19:00"]
+    # 日付から時刻を切り替える（"2027-01-01": ["08:00", "12:00", "19:00"] など）。その日以降に効く
+    post_times_from: dict[str, list[str]] = {}
     slug_prefix: str = "yc-"
     # アイキャッチは元写真を WP のメディアに取り込む（既存記事と同じ運用。2026-09-28 ユーザー判断）
     upload_featured_image: bool = True
