@@ -116,3 +116,10 @@ def test_bulk_approve_and_reject(env):
     assert r.json()["done"] == [d]
     row = conn.execute("SELECT status FROM articles WHERE id = ?", (d,)).fetchone()
     assert row["status"] == "rejected"
+
+
+def test_select_all_is_hidden_when_nothing_to_review(env):
+    c, conn, _ = env
+    assert 'id="bulk-all"' not in c.get("/articles").text
+    add_article(conn, url="https://t.com/x", score=80)
+    assert 'id="bulk-all"' in c.get("/articles").text
