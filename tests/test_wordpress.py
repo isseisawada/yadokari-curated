@@ -157,15 +157,25 @@ def test_sync_marks_published_and_reports_missed_schedules(config, db):
 
 
 def test_next_free_slot_skips_taken_and_too_soon(config):
-    # 1日3本（08:00 / 12:00 / 19:00 JST。2026-10-03 ユーザー指定）
-    assert config.wordpress.post_times == ["08:00", "12:00", "19:00"]
+    # 今年末までは 08:00 の1本（2026-10-03 ユーザー指定）
+    assert config.wordpress.post_times == ["08:00"]
     now = datetime(2026, 9, 30, 22, 45, tzinfo=UTC)  # JST 10/1 07:45（08:00 まで15分）
     first = next_free_slot(config, set(), now)
-    assert first == datetime(2026, 10, 1, 3, 0, tzinfo=UTC)  # 08:00 は近すぎるので 12:00 JST
-    second = next_free_slot(config, {first.isoformat()}, now)
-    assert second == datetime(2026, 10, 1, 10, 0, tzinfo=UTC)  # 19:00 JST
-    third = next_free_slot(config, {first.isoformat(), second.isoformat()}, now)
-    assert third == datetime(2026, 10, 1, 23, 0, tzinfo=UTC)  # 翌日 08:00 JST
+    assert first == datetime(2026, 10, 1, 23, 0, tzinfo=UTC)  # 翌日 10/2 の 08:00 JST
+    assert next_free_slot(config, {first.isoformat()}, now) == datetime(2026, 10, 2, 23, 0, tzinfo=UTC)
+
+
+def test_three_posts_a_day_from_2027(config):
+    now = datetime(2026, 12, 31, 0, 0, tzinfo=UTC)  # JST 12/31 09:00
+    taken: set[str] = set()
+    slots = []
+    for _ in range(4):
+        s = next_free_slot(config, taken, now)
+        taken.add(s.isoformat())
+        slots.append(s)
+    # 12/31 は 08:00 だけ（もう過ぎている）→ 1/1 は 08:00・12:00・19:00、そのあと 1/2 08:00
+    assert slots == [datetime(2026, 12, 31, 23, 0, tzinfo=UTC), datetime(2027, 1, 1, 3, 0, tzinfo=UTC),
+                     datetime(2027, 1, 1, 10, 0, tzinfo=UTC), datetime(2027, 1, 1, 23, 0, tzinfo=UTC)]
 
 
 def test_more_post_times_means_more_posts_per_day(config):

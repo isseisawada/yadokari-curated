@@ -50,6 +50,15 @@ def slug_for(config: Config, article_id: int) -> str:
 # ----------------------------------------------------------------------
 # 予定枠
 # ----------------------------------------------------------------------
+def times_for(config: Config, day: date) -> list[time]:
+    """その日の公開時刻。post_times_from（日付 → 時刻）があれば、その日以前で一番新しいもの。"""
+    times = config.wordpress.post_times
+    for start, ts in sorted(config.wordpress.post_times_from.items()):
+        if date.fromisoformat(start) <= day:
+            times = ts
+    return sorted(time.fromisoformat(t) for t in times)
+
+
 def next_free_slot(config: Config, taken: set[str], now: datetime | None = None,
                    days_ahead: int = 400) -> datetime:
     """空いている次の枠（post_times の数＝1日の本数）。frmg の plan.py と同じ考え方。
@@ -59,10 +68,9 @@ def next_free_slot(config: Config, taken: set[str], now: datetime | None = None,
     tz = ZoneInfo(config.app.timezone)
     now = now or datetime.now(UTC)
     local_now = now.astimezone(tz)
-    times = sorted(time.fromisoformat(t) for t in config.wordpress.post_times)
     for offset in range(days_ahead):
         day: date = local_now.date() + timedelta(days=offset)
-        for t in times:
+        for t in times_for(config, day):
             slot = datetime.combine(day, t, tzinfo=tz)
             # 30分を切った枠は選ばない（WP に送る・人が見る時間がない）
             if slot <= local_now + timedelta(minutes=30):
