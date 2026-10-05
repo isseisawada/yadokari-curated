@@ -163,7 +163,13 @@ def _upload_featured(config: Config, wp: WordPressClient, draft: Row, source_url
     if "." not in name:
         name += mimetypes.guess_extension(content_type or "image/jpeg") or ".jpg"
     domain = urlparse(source_url).netloc.removeprefix("www.")
-    return wp.upload_media(name, content, content_type or "image/jpeg", caption=f"via: {domain}")
+    try:
+        return wp.upload_media(name, content, content_type or "image/jpeg", caption=f"via: {domain}")
+    except WordPressError as exc:
+        # 2026-10-05: WP が受け付けない形式（「このファイルタイプをアップロードする権限がありません」）で
+        # 予約ごと落ちた。取り込めなければ元の URL のままアイキャッチにする（FIFU）
+        log.warning("アイキャッチを WP に取り込めませんでした: %s (%s)", url, exc)
+        return None
 
 
 def default_fetch(config: Config):
