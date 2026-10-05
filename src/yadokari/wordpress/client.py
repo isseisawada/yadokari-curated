@@ -138,12 +138,18 @@ class WordPressClient:
     # --- メディア -----------------------------------------------------
     def upload_media(self, filename: str, content: bytes, content_type: str,
                      caption: str | None = None) -> int:
+        # ヘッダは ASCII しか送れない（2026-10-05: ファイル名の「–」で落ちた）。
+        # ASCII に寄せた名前と、元の名前（RFC 5987 の filename*）の両方を付ける
+        from urllib.parse import quote
+
+        safe = "".join(c if c.isascii() and (c.isalnum() or c in "._-") else "-" for c in filename)
+        safe = safe.strip("-") or "featured.jpg"
         r = self._http.post(
             f"{self.api}/media",
             content=content,
             headers={
                 "Content-Type": content_type,
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": f"attachment; filename=\"{safe}\"; filename*=UTF-8''{quote(filename)}",
             },
         )
         data = self._check(r)
