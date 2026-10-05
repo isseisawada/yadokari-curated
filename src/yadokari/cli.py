@@ -14,7 +14,7 @@
     python -m yadokari.cli wp check
     python -m yadokari.cli wp images
     python -m yadokari.cli wp resend
-    python -m yadokari.cli auto [--limit 3]
+    python -m yadokari.cli auto [--limit 10]
     python -m yadokari.cli x post DRAFT_ID [--dry-run]
     python -m yadokari.cli learn
     python -m yadokari.cli monitor
@@ -411,7 +411,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=_cmd_wp)
 
     p = sub.add_parser("auto", help="承認済みを下書きにして、空いている最短の枠へ予約する")
-    p.add_argument("--limit", type=int, default=3, help="1回に作る下書きの上限")
+    p.add_argument("--limit", type=int, default=10, help="1回に作る下書きの上限")
     p.set_defaults(func=_cmd_auto)
 
     p = sub.add_parser("x", help="公開済みの記事を X に投稿する（例外用）")
