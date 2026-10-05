@@ -283,3 +283,23 @@ def test_tweet_text_is_sent_only_when_x_is_enabled(config, db):
     config.x.enabled = True
     r = push(config, db, draft_id, wp=wp.client(config), fetch=fake_fetch)
     assert wp.posts[r.post_id]["yc_tweet_text"]
+
+
+def test_upload_media_with_non_ascii_filename():
+    """2026-10-05: ファイル名に「–」があるとヘッダが作れず、毎時の自動予約が落ち続けた。"""
+    import httpx
+
+    from yadokari.config import WordPressConfig
+    from yadokari.wordpress.client import WordPressClient
+
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["cd"] = request.headers["content-disposition"]
+        return httpx.Response(201, json={"id": 5})
+
+    cfg = WordPressConfig()
+    wp = WordPressClient(cfg, http=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert wp.upload_media("cabin–2024 写真.jpg", b"x", "image/jpeg") == 5
+    assert 'filename="cabin-2024.jpg"' in seen["cd"] or 'filename="cabin-2024' in seen["cd"]
+    assert "filename*=UTF-8''" in seen["cd"]
