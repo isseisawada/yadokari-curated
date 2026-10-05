@@ -303,3 +303,22 @@ def test_upload_media_with_non_ascii_filename():
     assert wp.upload_media("cabin–2024 写真.jpg", b"x", "image/jpeg") == 5
     assert 'filename="cabin-2024.jpg"' in seen["cd"] or 'filename="cabin-2024' in seen["cd"]
     assert "filename*=UTF-8''" in seen["cd"]
+
+
+def test_rejected_media_upload_falls_back_to_url(config, db):
+    """2026-10-05: WP が画像の形式を受け付けず（500）、予約ごと落ちた。URL のままアイキャッチにして続ける。"""
+    import httpx
+
+    wp = FakeWP()
+    real = wp.handler
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/media") and request.method == "POST":
+            return httpx.Response(500, json={"code": "rest_upload_sideload_error",
+                                             "message": "このファイルタイプをアップロードする権限がありません。"})
+        return real(request)
+
+    wp.handler = handler
+    r = push(config, db, _draft(config, db), wp=wp.client(config), fetch=fake_fetch)
+    post = wp.posts[r.post_id]
+    assert "featured_media" not in post and post["yc_featured_url"].startswith("http")
