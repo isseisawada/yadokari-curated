@@ -17,10 +17,13 @@ import html
 import json
 import mimetypes
 import re
+import time as _time
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
+
+import httpx
 
 from yadokari.config import Config
 from yadokari.db.connection import DbConnection, Row
@@ -259,11 +262,13 @@ def push(config: Config, conn: DbConnection, draft_id: int, *, schedule: bool = 
 class SyncResult:
     published: list[tuple[int, str | None]] = field(default_factory=list)
     missed: list[tuple[int, str]] = field(default_factory=list)
+    errors: list[tuple[int, str]] = field(default_factory=list)  # (draft_id, エラー)
     checked: int = 0
 
 
 def sync(config: Config, conn: DbConnection, wp: WordPressClient | None = None,
-         now: datetime | None = None, grace_minutes: int = 30) -> SyncResult:
+         now: datetime | None = None, grace_minutes: int = 30,
+         retry_wait: float = 5.0) -> SyncResult:
     """WP に送ったものの状態を取り直す。公開されていたら published にする
     （SNS はここで公開を確かめてから出す）。
 
@@ -277,7 +282,21 @@ def sync(config: Config, conn: DbConnection, wp: WordPressClient | None = None,
     try:
         for d in drafts_to_sync(conn):
             result.checked += 1
-            post = wp.get_post(d["wp_post_id"])
+            # 2026-10-07: yadokari.net への接続が1回切れただけで全体が止まった。
+            # 1回だけやり直し、それでもだめならその1本を飛ばして続ける（次の実行で取り直す）
+            post = None
+            for attempt in range(2):
+                try:
+                    post = wp.get_post(d["wp_post_id"])
+                    break
+                except (httpx.HTTPError, WordPressError) as exc:
+                    if attempt == 0:
+                        _time.sleep(retry_wait)
+                        continue
+                    log.warning("WP の状態を取れませんでした: draft=%s (%s)", d["id"], exc)
+                    result.errors.append((d["id"], str(exc)))
+            if post is None:
+                continue
             if post.status == "publish":
                 mark_published(conn, d["id"], post.link, now.isoformat())
                 result.published.append((d["id"], post.link))
@@ -286,7 +305,7 @@ def sync(config: Config, conn: DbConnection, wp: WordPressClient | None = None,
                 if now > due + timedelta(minutes=grace_minutes):
                     result.missed.append((d["id"], d["scheduled_at"]))
             conn.execute("UPDATE drafts SET wp_status = ? WHERE id = ?", (post.status, d["id"]))
-        conn.commit()
+            conn.commit()
     finally:
         if own:
             wp.close()

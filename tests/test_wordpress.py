@@ -322,3 +322,34 @@ def test_rejected_media_upload_falls_back_to_url(config, db):
     r = push(config, db, _draft(config, db), wp=wp.client(config), fetch=fake_fetch)
     post = wp.posts[r.post_id]
     assert "featured_media" not in post and post["yc_featured_url"].startswith("http")
+
+
+def test_sync_skips_a_post_it_cannot_read_and_continues(config, db):
+    """2026-10-07: 接続が1回切れただけで wp sync 全体が止まった。1本は飛ばして続ける。"""
+    import httpx
+
+    config.wordpress.allow_schedule = True
+    wp = FakeWP()
+    now = datetime.now(UTC)
+    a = _draft(config, db, now + timedelta(hours=2))
+    ra = push(config, db, a, schedule=True, wp=wp.client(config), fetch=fake_fetch)
+    b_article = add_article(db, url="https://t.com/b2", status="approved")
+    b = generate_for(config, db, b_article, client=FakeLLM(draft_json()))
+    d = get_draft(db, b)
+    edit_draft(db, b, title=d["title"], excerpt="", body_html=d["body_html"], tags=[],
+               featured_image=None, scheduled_at=(now + timedelta(hours=1)).isoformat())
+    db.commit()
+    rb = push(config, db, b, schedule=True, wp=wp.client(config), fetch=fake_fetch)
+    wp.posts[rb.post_id]["status"] = "publish"
+
+    real = wp.handler
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url.path.endswith(f"/posts/{ra.post_id}"):
+            raise httpx.ConnectError("Connection reset by peer")
+        return real(request)
+
+    wp.handler = handler
+    res = sync(config, db, wp=wp.client(config), retry_wait=0)
+    assert [x[0] for x in res.errors] == [a]
+    assert [x[0] for x in res.published] == [b]

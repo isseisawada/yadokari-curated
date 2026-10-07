@@ -58,7 +58,8 @@ jobs:
         if: steps.check.outputs.ready == 'true' && env.WP_APP_PASSWORD != ''
         run: python -m yadokari.cli wp sync
       - name: 件数と週次レポート
-        if: steps.check.outputs.ready == 'true'
+        # WP の状態確認が失敗しても件数は出す
+        if: always() && steps.check.outputs.ready == 'true'
         run: |
           python -m yadokari.cli stats
           python -m yadokari.cli report
