@@ -234,7 +234,11 @@ def _cmd_wp(cfg, args) -> int:
         print(f"  公開: draft {draft_id} {link or ''}")
     for draft_id, when in res.missed:
         print(f"  要確認: draft {draft_id} は予定 {when} を過ぎても公開されていません（予約投稿の失敗）")
-    return 1 if res.missed else 0
+    for draft_id, err in res.errors:
+        print(f"  取れなかった（次の実行で取り直す）: draft {draft_id} {err}")
+    # 1本ずつの取りこぼしは止めない。全部取れなかったとき（WP に繋がらない）だけ失敗にする
+    all_failed = res.checked > 0 and len(res.errors) == res.checked
+    return 1 if res.missed or all_failed else 0
 
 
 def _cmd_auto(cfg, args) -> int:
