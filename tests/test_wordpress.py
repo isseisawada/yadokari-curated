@@ -157,8 +157,7 @@ def test_sync_marks_published_and_reports_missed_schedules(config, db):
 
 
 def test_next_free_slot_skips_taken_and_too_soon(config):
-    # 今年末までは 08:00 の1本（2026-10-03 ユーザー指定）
-    assert config.wordpress.post_times == ["08:00"]
+    config.wordpress.post_times = ["08:00"]
     now = datetime(2026, 9, 30, 22, 45, tzinfo=UTC)  # JST 10/1 07:45（08:00 まで15分）
     first = next_free_slot(config, set(), now)
     assert first == datetime(2026, 10, 1, 23, 0, tzinfo=UTC)  # 翌日 10/2 の 08:00 JST
@@ -166,6 +165,8 @@ def test_next_free_slot_skips_taken_and_too_soon(config):
 
 
 def test_two_posts_a_day_from_2027(config):
+    config.wordpress.post_times = ["08:00"]
+    config.wordpress.post_times_from = {"2027-01-01": ["08:00", "16:00"]}
     now = datetime(2026, 12, 31, 0, 0, tzinfo=UTC)  # JST 12/31 09:00
     taken: set[str] = set()
     slots = []
@@ -173,7 +174,7 @@ def test_two_posts_a_day_from_2027(config):
         s = next_free_slot(config, taken, now)
         taken.add(s.isoformat())
         slots.append(s)
-    # 1/1 から 08:00・16:00 JST の2本（2026-10-03 ユーザー指定）
+    # 1/1 から 08:00・16:00 JST の2本
     assert slots == [datetime(2026, 12, 31, 23, 0, tzinfo=UTC), datetime(2027, 1, 1, 7, 0, tzinfo=UTC),
                      datetime(2027, 1, 1, 23, 0, tzinfo=UTC), datetime(2027, 1, 2, 7, 0, tzinfo=UTC)]
 
@@ -353,3 +354,11 @@ def test_sync_skips_a_post_it_cannot_read_and_continues(config, db):
     res = sync(config, db, wp=wp.client(config), retry_wait=0)
     assert [x[0] for x in res.errors] == [a]
     assert [x[0] for x in res.published] == [b]
+
+
+def test_evening_slot_today_when_mornings_taken(config):
+    # 2026-10-09 ユーザー指定: 今日から2本。朝が埋まっていれば直近の夕方
+    assert config.wordpress.post_times == ["08:00", "16:00"]
+    now = datetime(2026, 10, 9, 3, 0, tzinfo=UTC)  # JST 10/9 12:00
+    taken = {datetime(2026, 10, d, 23, 0, tzinfo=UTC).isoformat() for d in range(9, 31)}
+    assert next_free_slot(config, taken, now) == datetime(2026, 10, 9, 7, 0, tzinfo=UTC)
