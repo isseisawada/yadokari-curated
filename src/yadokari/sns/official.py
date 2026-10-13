@@ -337,6 +337,14 @@ def push(config: Config, conn: DbConnection, wp, now: datetime | None = None) ->
     return n, errors
 
 
+def clear_drafts(conn: DbConnection, now: datetime | None = None) -> int:
+    """これからの枠の承認待ちを消す（次の plan で作り直す）。"""
+    now = now or datetime.now(UTC)
+    n = conn.execute("DELETE FROM sns_posts WHERE state = 'draft' AND slot_at > ?", (now.isoformat(),)).rowcount
+    conn.commit()
+    return n
+
+
 def cancel(conn: DbConnection, wp, post_id: int) -> None:
     """外す。WP に渡していれば取り消す。"""
     row = conn.execute("SELECT state FROM sns_posts WHERE id = ?", (post_id,)).fetchone()

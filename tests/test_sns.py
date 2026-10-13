@@ -187,3 +187,13 @@ def test_x_get_signs_query():
     keys = {"api_key": "a", "api_secret": "b", "access_token": "c", "access_secret": "d"}
     a = _oauth_header("GET", "https://api.x.com/2/tweets", keys, {"ids": "1"})
     assert a.startswith("OAuth ") and "ids" not in a
+
+
+def test_clear_drafts_keeps_approved(config, db):
+    cfg = sns_config(config)
+    official.plan(cfg, db, wp=FakeSnsWP(), client=FakeLLM(*[good() for _ in range(3)]), now=NOW, limit=3)
+    first = db.execute("SELECT id FROM sns_posts ORDER BY slot_at").fetchone()["id"]
+    db.execute("UPDATE sns_posts SET state = 'approved' WHERE id = ?", (first,))
+    db.commit()
+    assert official.clear_drafts(db, NOW) == 2
+    assert [r["id"] for r in db.execute("SELECT id FROM sns_posts").fetchall()] == [first]
