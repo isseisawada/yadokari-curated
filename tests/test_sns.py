@@ -248,3 +248,17 @@ def test_human_edits_become_examples_and_ai_words_are_retried(config, db):
     assert "余白" in llm.calls[1]["messages"][-1]["content"]  # AIっぽい言葉は1回書き直させる
     row = db.execute("SELECT * FROM sns_posts ORDER BY id DESC").fetchone()
     assert row["text"] == good()["text"] and row["ai_text"] == good()["text"]
+
+
+def test_archive_after_is_sent(config, db):
+    cfg = sns_config(config, until=None)
+    assert cfg.sns.archive_after == "2020-01-01"
+    seen = []
+
+    class AfterWP(FakeSnsWP):
+        def list_posts(self, params):
+            seen.append(params.get("after"))
+            return super().list_posts(params)
+
+    official.plan(cfg, db, wp=AfterWP(), client=FakeLLM(good()), now=NOW, limit=1)
+    assert seen and set(seen) == {"2020-01-01T00:00:00"}
