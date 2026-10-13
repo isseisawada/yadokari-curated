@@ -31,4 +31,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[postgres]"
+      - run: python -m yadokari.cli db migrate
       - run: python -m yadokari.cli auto --limit "${{ inputs.limit || '10' }}"
