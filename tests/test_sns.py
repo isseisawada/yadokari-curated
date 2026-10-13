@@ -197,3 +197,38 @@ def test_clear_drafts_keeps_approved(config, db):
     db.commit()
     assert official.clear_drafts(db, NOW) == 2
     assert [r["id"] for r in db.execute("SELECT id FROM sns_posts").fetchall()] == [first]
+
+
+def test_archive_prefers_interviews_and_skips_excluded_and_unusable(config, db):
+    cfg = sns_config(config, until=None)
+
+    class PoolWP(FakeSnsWP):
+        def __init__(self):
+            super().__init__()
+            self.seen = []
+
+        def list_posts(self, params):
+            self.seen.append(params.get("search"))
+            if params.get("search") == "インタビュー":
+                posts = [
+                    {"id": 1, "link": "l1", "title": {"rendered": "晴耕雨読の家・那須・430万円"},
+                     "content": {"rendered": BODY}},
+                    {"id": 2, "link": "l2", "title": {"rendered": "【インタビュー】終わった募集の話"},
+                     "content": {"rendered": BODY}},
+                    {"id": 3, "link": "l3", "title": {"rendered": "【インタビュー】小さな家に暮らす人"},
+                     "content": {"rendered": BODY}},
+                ]
+                return (posts[:1], 3) if params.get("per_page") == 1 else (posts, 1)
+            return super().list_posts(params)
+
+    wp = PoolWP()
+    unusable = {**good(), "usable": False, "reason": "募集は終わっている"}
+    # 1本目（id 2 か 3）を AI が外したら、もう1本を使う
+    llm = FakeLLM(unusable, {**good(), "usable": True, "reason": "ok"})
+    official.plan(cfg, db, wp=wp, client=llm, now=NOW, limit=1, rng=random.Random(0))
+    row = db.execute("SELECT * FROM sns_posts").fetchone()
+    assert row["kind"] == "archive" and row["wp_post_id"] in (2, 3)
+    assert wp.seen[0] == "インタビュー"
+    assert len(llm.calls) == 2  # 430万円の物件は AI に見せる前に外れる
+    first_title = llm.calls[0]["messages"][0]["content"]
+    assert "430万円" not in first_title

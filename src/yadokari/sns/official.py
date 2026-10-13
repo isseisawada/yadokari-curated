@@ -84,8 +84,12 @@ SCHEMA = {
     "properties": {
         "text": {"type": "string", "description": "投稿の本文（URL は入れない）"},
         "pattern": {"type": "string", "enum": list(PATTERNS)},
+        "usable": {"type": "boolean",
+                   "description": "今読んでも成り立つ記事なら true。終わった催し・募集・期間限定、今も買える／申し込める"
+                                  "ことが前提の物件や商品、古くなった制度・補助金・統計の話なら false"},
+        "reason": {"type": "string", "description": "usable の理由を1文"},
     },
-    "required": ["text", "pattern"],
+    "required": ["text", "pattern", "usable", "reason"],
     "additionalProperties": False,
 }
 
@@ -170,28 +174,45 @@ def used_recently(config: Config, conn: DbConnection, now: datetime) -> set[int]
         "SELECT wp_post_id FROM sns_posts WHERE slot_at > ? AND state != 'skipped'", (since,)).fetchall()}
 
 
+def excluded_title(config: Config, title: str) -> bool:
+    return any(re.search(p, title) for p in config.sns.archive_exclude_title)
+
+
 def archive_article(config: Config, wp, used: set[int], now: datetime,
-                    rng: random.Random | None = None, tries: int = 4) -> Source | None:
-    """yadokari.net の過去記事から1本。ページを無作為に選んで、まだ使っていないものを取る。"""
+                    rng: random.Random | None = None, tries: int = 4,
+                    skip: set[int] | None = None) -> Source | None:
+    """yadokari.net の過去記事から1本。
+
+    archive_pools を上から順に試す（2026-10-14 ユーザー指定: インタビュー記事を増やす）。
+    どれも使い切ったら全記事から。ページを無作為に選んで、まだ使っていない・外す条件に当たらないものを取る。
+    """
     rng = rng or random.Random()
+    skip = skip or set()
     before = (now - timedelta(days=config.sns.archive_min_age_days)).strftime("%Y-%m-%dT%H:%M:%S")
-    params = {"before": before, "per_page": 20, "_fields": "id,link,title,content"}
+    base = {"before": before, "per_page": 20, "_fields": "id,link,title,content"}
+    if config.sns.archive_after:
+        base["after"] = f"{config.sns.archive_after}T00:00:00"
     if config.sns.archive_exclude_categories:
-        params["categories_exclude"] = ",".join(map(str, config.sns.archive_exclude_categories))
-    _, pages = wp.list_posts({**params, "per_page": 1, "page": 1})
-    pages = max(1, (pages + 19) // 20)  # per_page=1 のページ数 = 件数
-    for _ in range(tries):
-        data, _ = wp.list_posts({**params, "page": rng.randint(1, pages)})
-        rng.shuffle(data)
-        for p in data:
-            pid = int(p["id"])
-            if pid in used:
-                continue
-            text = plain_text(p.get("content", {}).get("rendered", ""))
-            if len(text) < 400:
-                continue
-            return Source(wp_post_id=pid, link=p.get("link") or magazine_link(config, pid),
-                          title=html.unescape(p.get("title", {}).get("rendered", "")), text=text)
+        base["categories_exclude"] = ",".join(map(str, config.sns.archive_exclude_categories))
+    if config.sns.archive_exclude_tags:
+        base["tags_exclude"] = ",".join(map(str, config.sns.archive_exclude_tags))
+    for pool in [*config.sns.archive_pools, {}]:
+        params = {**base, **pool}
+        _, total = wp.list_posts({**params, "per_page": 1, "page": 1})
+        pages = max(1, (total + 19) // 20)  # per_page=1 のページ数 = 件数
+        for _ in range(min(tries, pages * 2)):
+            data, _ = wp.list_posts({**params, "page": rng.randint(1, pages)})
+            rng.shuffle(data)
+            for p in data:
+                pid = int(p["id"])
+                title = html.unescape(p.get("title", {}).get("rendered", ""))
+                if pid in used or pid in skip or excluded_title(config, title):
+                    continue
+                text = plain_text(p.get("content", {}).get("rendered", ""))
+                if len(text) < 400:
+                    continue
+                return Source(wp_post_id=pid, link=p.get("link") or magazine_link(config, pid),
+                              title=title, text=text)
     return None
 
 
@@ -253,6 +274,7 @@ def write(config: Config, src: Source, client, *, hint: str = "", recent: list[s
             messages += [{"role": "assistant", "content": json.dumps(data, ensure_ascii=False)},
                          {"role": "user", "content": "直してください: " + "／".join(problems)}]
     return {"text": str(data.get("text", "")).strip(), "pattern": data.get("pattern"),
+            "usable": data.get("usable", True) is not False, "reason": str(data.get("reason", "")),
             "warnings": problems}
 
 
@@ -275,15 +297,28 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
     for slot, kind in open_slots(config, conn, now)[:limit]:
         try:
             src = new_article_for(config, conn, slot) if kind == "new" else None
-            if src is None:
-                kind = "archive"
-                src = archive_article(config, wp, used, now, rng=rng)
-            if src is None:
-                res.failed.append((slot.isoformat(), "使える過去記事が見つかりません"))
-                continue
             recent = [r["text"] for r in conn.execute(
                 "SELECT text FROM sns_posts ORDER BY slot_at DESC LIMIT 6").fetchall()]
-            out = write(config, src, client, hint=hint, recent=recent)
+            out = None
+            if src is not None:
+                out = write(config, src, client, hint=hint, recent=recent)
+            else:
+                # 過去記事は、AI が「今読んでも成り立たない」と言ったら別の記事にする（3本まで）
+                kind = "archive"
+                rejected: set[int] = set()
+                for _ in range(3):
+                    src = archive_article(config, wp, used, now, rng=rng, skip=rejected)
+                    if src is None:
+                        break
+                    out = write(config, src, client, hint=hint, recent=recent)
+                    if out["usable"]:
+                        break
+                    log.info("過去記事を外しました: wp#%s %s", src.wp_post_id, out["reason"])
+                    rejected.add(src.wp_post_id)
+                    out = None
+            if src is None or out is None:
+                res.failed.append((slot.isoformat(), "使える過去記事が見つかりません"))
+                continue
         except Exception as exc:  # noqa: BLE001 - 1枠の失敗で残りを止めない
             conn.rollback()
             res.failed.append((slot.isoformat(), str(exc)))

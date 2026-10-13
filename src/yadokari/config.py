@@ -303,8 +303,15 @@ class SnsConfig(BaseModel):
     # 過去記事: 公開からこの日数より新しいものは使わない／同じ記事はこの日数あけて使う
     archive_min_age_days: int = 60
     repeat_after_days: int = 365
-    # 過去記事に使わないカテゴリ（告知・プレスリリースなど、時期が過ぎると意味が無いもの）
+    # 過去記事に使わないカテゴリ・タグ（告知・プレスリリースなど、時期が過ぎると意味が無いもの）
     archive_exclude_categories: list[int] = []
+    archive_exclude_tags: list[int] = []
+    # タイトルがこれに当たる過去記事は使わない（正規表現）
+    archive_exclude_title: list[str] = []
+    # 過去記事はこの日（YYYY-MM-DD）以降に公開されたものだけ。null なら制限なし
+    archive_after: str | None = None
+    # 過去記事を探す順番（WP REST の絞り込み）。上から試して、使い切ったら全記事から
+    archive_pools: list[dict] = []
     # リンクに付ける計測タグ（utm_source は x / threads で WP が付け替える）
     utm_campaign_new: str = "yd_sns_new"
     utm_campaign_archive: str = "yd_sns_archive"
