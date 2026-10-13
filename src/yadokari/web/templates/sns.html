@@ -1,111 +1,183 @@
 {% extends "base.html" %}
 {% block title %}SNS | YADOKARI{% endblock %}
 {% block sub %}
-<div class="sub">
-  <h1>SNS</h1>
-  <span class="muted">X・Threads @yadokari_mobi ／ 新着 {{ new_times|join('・') }} ・ 過去記事 {{ archive_times|join('・') }}{% if approval_until %} ／ {{ approval_until }} までは承認したものだけ出ます{% endif %}</span>
-  <div class="tabs">
-    <a href="/sns" class="{{ 'on' if view == 'next' }}">これから</a>
-    <a href="/sns?view=done" class="{{ 'on' if view == 'done' }}">出したもの</a>
+<div class="sub snsub">
+  <div class="snsub-row">
+    <h1>SNS</h1>
+    <div class="tabs">
+      <a href="/sns" class="{{ 'on' if view == 'next' }}">これから</a>
+      <a href="/sns?view=done" class="{{ 'on' if view == 'done' }}">出したもの</a>
+    </div>
   </div>
-  {% if view == 'next' and n_draft %}
-  <form method="post" action="/sns/approve-all" onsubmit="return confirm('承認待ち {{ n_draft }} 本をすべて承認します。よろしいですか？')"><button class="approve small">承認待ち {{ n_draft }} 本をすべて承認</button></form>
-  {% endif %}
+  <p class="snsub-note">X・Threads @yadokari_mobi ／ 新着 {{ new_times|join('・') }}・過去記事 {{ archive_times|join('・') }}{% if approval_until %} ／ {{ approval_until }} までは承認したものだけ出ます{% endif %}</p>
 </div>
 {% endblock %}
 {% block body %}
 <style>
-  .sday { font:800 15px "Inter","Noto Sans JP",sans-serif; margin:40px 0 14px; padding-bottom:8px; border-bottom:2px solid var(--ink); }
-  .sday:first-child { margin-top:0; }
-  .spost { display:grid; grid-template-columns:96px 1fr 260px; gap:24px; padding:20px 0; border-bottom:1px solid var(--line); }
-  .spost .when { font:800 26px/1 "Inter",sans-serif; }
-  .spost .when small { display:block; margin-top:10px; }
-  .chip { display:inline-block; font-size:12px; font-weight:700; padding:1px 10px; border-radius:999px; border:1px solid var(--ink); margin:0 6px 6px 0; }
+  /* 2026-10-14 ユーザー指定: スマホで承認しやすく。1列のフィード（PC でも同じ幅）・大きな承認ボタン・
+     その場で承認（画面が飛ばない）・承認待ちをまとめて承認するボタンは画面下に固定 */
+  .snsub { display:block; padding:12px 16px; }
+  .snsub-row { display:flex; align-items:center; gap:16px; }
+  .snsub-row h1 { font-size:20px; }
+  .snsub .tabs { margin-left:auto; gap:18px; }
+  .snsub-note { margin:4px 0 0; font-size:12px; color:var(--sub); line-height:1.6; }
+  main { max-width:640px; }
+  .sday { position:sticky; top:84px; z-index:5; background:rgba(255,255,255,.94); backdrop-filter:blur(6px);
+          font:800 14px "Inter","Noto Sans JP",sans-serif; margin:28px -16px 8px; padding:10px 16px; border-bottom:1px solid var(--line); }
+  .sday:first-of-type { margin-top:0; }
+  .sp { padding:14px 0 20px; border-bottom:1px solid var(--line); }
+  .sp-h { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .sp-h .t { font:800 22px/1 "Inter",sans-serif; margin-right:4px; }
+  .chip { display:inline-block; font-size:12px; font-weight:700; padding:2px 10px; border-radius:999px; border:1px solid var(--ink); line-height:1.6; }
   .chip.new { background:var(--blue); border-color:var(--blue); color:#fff; }
+  .chip.old { border-color:var(--line); color:#555; }
   .chip.st-draft { border-color:var(--red); color:var(--red); }
   .chip.st-approved, .chip.st-queued { background:var(--ink); color:#fff; }
   .chip.st-posted { background:var(--band); border-color:var(--line); }
   .chip.st-failed { background:var(--red); border-color:var(--red); color:#fff; }
   .chip.st-skipped { color:var(--sub); border-color:var(--line); }
-  .bubble { border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+  .sp-h .pat { margin-left:auto; font-size:12px; color:var(--sub); }
+  .bubble { border:1px solid var(--line); border-radius:16px; padding:14px 16px 12px; background:#fff; }
   .bubble .who { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; margin-bottom:6px; }
-  .bubble .who i { width:24px; height:24px; border-radius:50%; background:#000; color:#fff; font:900 12px/24px "Inter",sans-serif; text-align:center; font-style:normal; }
-  .bubble textarea { border:0; padding:0; min-height:84px; resize:none; overflow:hidden; font-size:15px; }
+  .bubble .who i { width:26px; height:26px; border-radius:50%; background:#000; color:#fff; font:900 12px/26px "Inter",sans-serif; text-align:center; font-style:normal; }
+  /* 16px 未満だと iPhone は入力時に拡大してしまう */
+  .bubble textarea { display:block; border:0; padding:0; min-height:84px; resize:none; overflow:hidden; font-size:16px; line-height:1.75; }
   .bubble textarea:focus { outline:none; }
+  .bubble.editing { border-color:var(--blue); box-shadow:0 0 0 3px rgba(0,58,242,.12); }
   /* 記事のカードは小さく（2026-10-14 ユーザー指摘: 画像が大きすぎる）。左に小さな画像、右にタイトル */
-  .bubble .ogcard { display:flex; align-items:center; gap:10px; margin-top:10px; border:1px solid var(--line); border-radius:10px; overflow:hidden; text-decoration:none; height:64px; }
-  .bubble .ogcard img { flex:none; width:96px; height:64px; object-fit:cover; background:var(--band); }
-  .bubble .ogcard span { flex:1; min-width:0; padding-right:10px; font-size:12px; line-height:1.5; color:var(--sub); overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
-  .spost > * { min-width:0; }
-  .spost .side { font-size:13px; }
-  .spost .side .acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-  .spost .side form { margin:0; }
+  .ogcard { display:flex; align-items:center; gap:10px; margin-top:10px; border:1px solid var(--line); border-radius:10px; overflow:hidden; text-decoration:none; height:64px; }
+  .ogcard img { flex:none; width:96px; height:64px; object-fit:cover; background:var(--band); }
+  .ogcard span { flex:1; min-width:0; padding-right:10px; font-size:12px; line-height:1.5; color:var(--sub); overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .bubble .ft { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; min-height:32px; }
   .count { font:500 12px "Inter",sans-serif; color:var(--sub); }
   .count.over { color:var(--red); font-weight:700; }
-  .nums { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; font-size:13px; margin-top:8px; }
+  .bubble .save { display:none; font-size:13px; padding:6px 18px; }
+  .bubble.editing .save { display:inline-block; }
+  .sp .warn { font-size:13px; margin-top:8px; }
+  .nums { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; font-size:13px; margin-top:10px; }
   .nums b { font-family:"Inter",sans-serif; }
-  @media (max-width: 760px) { .spost { grid-template-columns:1fr; gap:10px; } }
+  .sp-acts { display:flex; gap:8px; margin-top:12px; }
+  .sp-acts form { margin:0; }
+  .sp-acts button { min-height:44px; font-size:14px; padding:0 18px; }
+  .sp-acts .go { flex:1; }
+  .sp-acts .go button { width:100%; }
+  .sp-acts .sub2 button { border-color:var(--line); color:#444; }
+  .sp.done .sp-acts .go { display:none; }
+  /* まとめて承認（画面下に固定） */
+  .bulk { position:fixed; left:0; right:0; bottom:0; z-index:20; padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+          background:rgba(255,255,255,.96); backdrop-filter:blur(8px); border-top:1px solid var(--line); }
+  .bulk form { max-width:640px; margin:0 auto; }
+  .bulk button { width:100%; min-height:48px; font-size:15px; }
+  body.has-bulk main { padding-bottom:120px; }
+  /* お知らせは画面下にふわっと出す（スマホでは上の帯が見えないため） */
+  main > .flash, main > .error, .toast2 { position:fixed; left:16px; right:16px; bottom:calc(84px + env(safe-area-inset-bottom)); z-index:30;
+          max-width:608px; margin:0 auto; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.15); transition:opacity .3s; }
+  .toast2 { background:#000; color:#fff; padding:12px 16px; font-size:14px; font-weight:700; opacity:0; pointer-events:none; }
+  .toast2.show { opacity:1; }
+  @media (max-width:640px) {
+    .sday { top:56px; margin-left:-12px; margin-right:-12px; padding-left:12px; padding-right:12px; }
+    .sp-h .t { font-size:20px; }
+  }
 </style>
 {% set ns = namespace(day='') %}
 {% for p in rows %}
-  {% set d = p['slot_at']|local('%Y.%m.%d（%a）') %}
+  {% set d = p['slot_at']|local('%m/%d（%a）') %}
   {% if d != ns.day %}<div class="sday">{{ d }}</div>{% set ns.day = d %}{% endif %}
-  <div class="spost" id="p{{ p['id'] }}">
-    <div class="when">{{ p['slot_at']|local('%H:%M') }}
-      <small><span class="chip {{ 'new' if p['kind'] == 'new' }}">{{ '新着' if p['kind'] == 'new' else '過去記事' }}</span></small>
+  {% set editable = p['state'] in ('draft', 'approved', 'queued') %}
+  <article class="sp {{ 'done' if p['state'] != 'draft' }}" id="p{{ p['id'] }}">
+    <div class="sp-h">
+      <b class="t">{{ p['slot_at']|local('%H:%M') }}</b>
+      <span class="chip {{ 'new' if p['kind'] == 'new' else 'old' }}">{{ '新着' if p['kind'] == 'new' else '過去記事' }}</span>
+      <span class="chip st-{{ p['state'] }}" data-state>{{ state_labels[p['state']] }}</span>
+      {% if p['pattern'] %}<span class="pat">{{ patterns.get(p['pattern'], p['pattern']) }}</span>{% endif %}
     </div>
-    <form method="post" action="/sns/{{ p['id'] }}" class="bubble">
+    <form method="post" action="/sns/{{ p['id'] }}" class="bubble" id="f{{ p['id'] }}" data-ajax>
       <div class="who"><i>Y</i>YADOKARI <span class="muted">@yadokari_mobi</span></div>
-      <textarea name="text" data-count {{ 'readonly' if p['state'] in ('posted', 'failed', 'skipped') }}>{{ p['text'] }}</textarea>
+      <textarea name="text" data-count {{ '' if editable else 'readonly' }}>{{ p['text'] }}</textarea>
       <a class="ogcard" href="{{ p['link'] }}" target="_blank" rel="noopener">
         {% if p['image'] %}<img src="{{ p['image'] }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endif %}
         <span>yadokari.net ・ {{ p['title'] }}</span>
       </a>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap">
+      <div class="ft">
         <span class="count"></span>
-        {% if p['state'] in ('draft', 'approved', 'queued') %}
-        <span style="display:flex;gap:8px">
-          <button class="small" name="do" value="save">保存</button>
-          {% if p['state'] == 'draft' %}<button class="approve small" name="do" value="approve">承認</button>{% endif %}
-        </span>
-        {% endif %}
+        {% if editable %}<button class="save" name="do" value="save">保存</button>{% endif %}
       </div>
     </form>
-    <div class="side">
-      <span class="chip st-{{ p['state'] }}">{{ state_labels[p['state']] }}</span>{% if p['pattern'] %}<span class="chip">{{ patterns.get(p['pattern'], p['pattern']) }}</span>{% endif %}
-      <div><a href="{{ p['link'] }}" target="_blank" rel="noopener">{{ p['title'] }}</a></div>
-      {% for w in (p['warnings']|fromjson or []) %}<div class="warn">{{ w }}</div>{% endfor %}
-      {% if p['error'] %}<div class="warn">{{ p['error'] }}</div>{% endif %}
-      {% set m = p['metrics']|fromjson %}
-      {% if m %}
-      <div class="nums">
-        {% if m.x %}<span>X</span><span><b>{{ m.x.impressions }}</b> 表示 ・ <b>{{ m.x.likes }}</b> いいね ・ <b>{{ m.x.clicks }}</b> クリック</span>{% endif %}
-        {% if m.threads %}<span>Threads</span><span><b>{{ m.threads.views }}</b> 表示 ・ <b>{{ m.threads.likes }}</b> いいね</span>{% endif %}
-      </div>
-      {% endif %}
-      {% if p['state'] in ('draft', 'approved', 'queued') %}
-      <div class="acts">
-        <form method="post" action="/sns/{{ p['id'] }}/redo"><button class="small">作り直す</button></form>
-        <form method="post" action="/sns/{{ p['id'] }}/skip" onsubmit="return confirm('この枠は出しません。よろしいですか？')"><button class="small">外す</button></form>
-      </div>
-      {% endif %}
+    {% for w in (p['warnings']|fromjson or []) %}<div class="warn">{{ w }}</div>{% endfor %}
+    {% if p['error'] %}<div class="warn">{{ p['error'] }}</div>{% endif %}
+    {% set m = p['metrics']|fromjson %}
+    {% if m %}
+    <div class="nums">
+      {% if m.x %}<span>X</span><span><b>{{ m.x.impressions }}</b> 表示 ・ <b>{{ m.x.likes }}</b> いいね ・ <b>{{ m.x.clicks }}</b> クリック</span>{% endif %}
+      {% if m.threads %}<span>Threads</span><span><b>{{ m.threads.views }}</b> 表示 ・ <b>{{ m.threads.likes }}</b> いいね</span>{% endif %}
     </div>
-  </div>
+    {% endif %}
+    {% if editable %}
+    <div class="sp-acts">
+      <div class="go"><button class="approve" form="f{{ p['id'] }}" name="do" value="approve">承認</button></div>
+      <form class="sub2" method="post" action="/sns/{{ p['id'] }}/redo"><button>作り直す</button></form>
+      <form class="sub2" method="post" action="/sns/{{ p['id'] }}/skip" onsubmit="return confirm('この枠は出しません。よろしいですか？')"><button>外す</button></form>
+    </div>
+    {% endif %}
+  </article>
 {% else %}
   <p class="muted">まだありません。毎時、{{ lookahead }}日先までの文面を自動で作ります。</p>
 {% endfor %}
+{% if view == 'next' and n_draft %}
+<div class="bulk"><form method="post" action="/sns/approve-all" onsubmit="return confirm('承認待ちをすべて承認します。よろしいですか？')">
+  <button class="approve">承認待ち <span data-ndraft>{{ n_draft }}</span> 本をすべて承認</button>
+</form></div>
+<script>document.body.classList.add('has-bulk');</script>
+{% endif %}
+<div class="toast2" role="status" aria-live="polite"></div>
 <script>
-// X の文字数（日本語は2、URL は23）。上限280 から URL と改行の分を引いた {{ budget }} まで
 (function () {
+  // X の文字数（日本語は2、URL は23）。上限280 から URL と改行の分を引いた {{ budget }} まで
   const light = [[0x0000,0x10FF],[0x2000,0x200D],[0x2010,0x201F],[0x2032,0x2037]];
   const w = s => [...s.normalize('NFC')].reduce((n, c) => { const o = c.codePointAt(0); return n + (light.some(([a,b]) => a <= o && o <= b) ? 1 : 2); }, 0);
+  const toast = document.querySelector('.toast2');
+  const say = (msg) => { toast.textContent = msg; toast.classList.add('show'); clearTimeout(say.t); say.t = setTimeout(() => toast.classList.remove('show'), 2600); };
+  // 上に出たお知らせは数秒で消す
+  document.querySelectorAll('main > .flash, main > .error').forEach(el => setTimeout(() => { el.style.opacity = 0; setTimeout(() => el.remove(), 400); }, 3500));
+
   document.querySelectorAll('textarea[data-count]').forEach(t => {
-    const out = t.closest('form').querySelector('.count');
+    const form = t.closest('form');
+    const out = form.querySelector('.count');
+    let orig = t.value;
     // 文面は全部見えるように、中身に合わせて高さを伸ばす
     const fit = () => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; };
-    t.addEventListener('input', fit); fit();
     const up = () => { const n = w(t.value); out.textContent = `${t.value.length}字 ・ X ${n}/{{ budget }}`; out.classList.toggle('over', n > {{ budget }}); };
-    t.addEventListener('input', up); up();
+    t.addEventListener('input', () => { fit(); up(); form.classList.toggle('editing', t.value !== orig); });
+    form.addEventListener('saved', () => { orig = t.value; form.classList.remove('editing'); });
+    fit(); up();
+    window.addEventListener('resize', fit);
+  });
+
+  // 承認・保存はその場で（画面を読み込み直さない）
+  document.querySelectorAll('form[data-ajax]').forEach(form => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.submitter;
+      const data = new FormData(form);
+      if (btn && btn.name) data.set(btn.name, btn.value);
+      if (btn) btn.disabled = true;
+      try {
+        const r = await fetch(form.action, { method: 'POST', body: data });
+        const q = new URL(r.url).searchParams;
+        if (!r.ok || q.get('err')) { say(q.get('err') || '保存できませんでした'); return; }
+        form.dispatchEvent(new Event('saved'));
+        const card = form.closest('.sp');
+        const chip = card.querySelector('[data-state]');
+        if (data.get('do') === 'approve' && chip.classList.contains('st-draft')) {
+          chip.className = 'chip st-approved'; chip.textContent = '承認済み';
+          card.classList.add('done');
+          const n = document.querySelector('[data-ndraft]');
+          if (n) { const k = Math.max(0, +n.textContent - 1); n.textContent = k; if (!k) { document.querySelector('.bulk').remove(); document.body.classList.remove('has-bulk'); } }
+        }
+        say(q.get('msg') || '保存しました');
+      } catch (err) { say('送れませんでした。電波を確かめてもう一度'); }
+      finally { if (btn) btn.disabled = false; }
+    });
   });
 })();
 </script>

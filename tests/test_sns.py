@@ -171,7 +171,7 @@ def test_review_page_edit_approve_and_skip(config, db, tmp_path):
                   now=datetime.now(UTC), limit=3)
     client = TestClient(create_app(cfg, wp_factory=lambda: wp))
     page = client.get("/sns")
-    assert page.status_code == 200 and "承認待ち 3 本をすべて承認" in page.text
+    assert page.status_code == 200 and "data-ndraft>3</span> 本をすべて承認" in page.text
     ids = [r["id"] for r in db.execute("SELECT id FROM sns_posts ORDER BY slot_at").fetchall()]
     r = client.post(f"/sns/{ids[0]}", data={"text": "書き直した文面。", "do": "approve"}, follow_redirects=False)
     assert r.status_code == 303
