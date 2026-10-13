@@ -279,6 +279,37 @@ class XConfig(BaseModel):
     max_hashtags: int = 2
 
 
+class SnsConfig(BaseModel):
+    """公式 SNS（X・Threads @yadokari_mobi）への投稿。2026-10-13 ユーザー指定。
+
+    1日4本。new_times はその日の新着記事（記事の公開の15分後）、archive_times は過去記事。
+    文面は「具体的な事実＋一言の気づき」。**投稿するのは WordPress**（mu-plugin yadokari-curated-sns.php が
+    時刻に X と Threads へ出す。鍵は wp-config.php）。こちらは文面を作って WP に予約を渡すだけ。
+    approval_until までは審査画面で承認したものだけ渡す（公式アカウントに初めて出すので）。
+    """
+
+    enabled: bool = False
+    new_times: list[str] = ["08:15", "16:15"]
+    archive_times: list[str] = ["12:15", "20:15"]
+    # 新着記事の公開時刻 = 投稿時刻 − この分
+    new_offset_min: int = 15
+    # 何日先まで文面を作っておくか
+    lookahead_days: int = 3
+    # この日（JST）より前の枠は、人が承認したものだけ出す。null なら承認なしで出す
+    approval_until: str | None = None
+    model: str = "claude-opus-5-5"
+    effort: str | None = "low"
+    fallbacks: bool = True
+    # 過去記事: 公開からこの日数より新しいものは使わない／同じ記事はこの日数あけて使う
+    archive_min_age_days: int = 60
+    repeat_after_days: int = 365
+    # 過去記事に使わないカテゴリ（告知・プレスリリースなど、時期が過ぎると意味が無いもの）
+    archive_exclude_categories: list[int] = []
+    # リンクに付ける計測タグ（utm_source は x / threads で WP が付け替える）
+    utm_campaign_new: str = "yd_sns_new"
+    utm_campaign_archive: str = "yd_sns_archive"
+
+
 class Config(BaseModel):
     app: AppConfig = AppConfig()
     http: HttpConfig
@@ -290,6 +321,7 @@ class Config(BaseModel):
     learning: LearningConfig = LearningConfig()
     seo: SeoConfig = SeoConfig()
     x: XConfig = XConfig()
+    sns: SnsConfig = SnsConfig()
 
     @property
     def anthropic_api_key(self) -> str:

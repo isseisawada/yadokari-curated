@@ -166,3 +166,27 @@ class WordPressClient:
                     "_fields": "id,date,link,title"},
         )
         return self._check(r)
+
+    # --- 過去記事の一覧（公開情報） -----------------------------------
+    def list_posts(self, params: dict) -> tuple[list[dict], int]:
+        """(投稿, 総ページ数)。総ページ数は X-WP-TotalPages。"""
+        r = self._http.get(f"{self.api}/posts", params=params)
+        data = self._check(r)
+        return data, int(r.headers.get("X-WP-TotalPages", "1") or 1)
+
+    # --- 公式 SNS の予約（mu-plugin yadokari-curated-sns.php） --------
+    @property
+    def _sns(self) -> str:
+        return self.config.base_url.rstrip("/") + "/wp-json/yc/v1/sns"
+
+    def sns_upsert(self, payload: dict) -> dict:
+        """予約を入れる・差し替える（key が同じなら上書き）。cancel: true で取り消す。"""
+        return self._check(self._http.post(self._sns, json=payload))
+
+    def sns_status(self, keys: list[int]) -> dict:
+        """{key: {state, x_id, threads_id, posted_at, error}}"""
+        return self._check(self._http.get(self._sns, params={"keys": ",".join(map(str, keys))}))
+
+    def sns_metrics(self, threads_ids: list[str]) -> dict:
+        """Threads の数字（トークンは WP にあるので WP に読ませる）。{"posts": {id: {...}}, "followers": n}"""
+        return self._check(self._http.get(self._sns + "/metrics", params={"threads": ",".join(threads_ids)}))

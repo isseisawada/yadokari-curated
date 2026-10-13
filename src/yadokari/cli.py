@@ -16,6 +16,7 @@
     python -m yadokari.cli wp resend
     python -m yadokari.cli auto [--limit 10]
     python -m yadokari.cli x post DRAFT_ID [--dry-run]
+    python -m yadokari.cli sns run|plan|push|sync|measure|report [--limit 8]
     python -m yadokari.cli learn
     python -m yadokari.cli monitor
     python -m yadokari.cli report
@@ -264,6 +265,54 @@ def _cmd_auto(cfg, args) -> int:
     return 1 if res.failed else 0
 
 
+def _cmd_sns(cfg, args) -> int:
+    """公式 SNS（X・Threads）。run = plan → push → sync（毎時）。measure・report は週1回。"""
+    import os
+
+    from yadokari.sns import official
+    from yadokari.wordpress.client import WordPressClient
+
+    ensure_migrated(cfg.app.target())
+    if not cfg.sns.enabled and args.action in ("run", "plan", "push"):
+        print("公式 SNS は止めてあります（config.yaml の sns.enabled）")
+        return 0
+    conn = connect(cfg.app.target())
+    wp = WordPressClient(cfg.wordpress)
+    failed = False
+    try:
+        if args.action in ("run", "plan"):
+            res = official.plan(cfg, conn, wp=wp, limit=args.limit)
+            print(f"文面 {len(res.created)} 本 / 失敗 {len(res.failed)} 件")
+            for slot, kind, pid in res.created:
+                print(f"  {slot} {kind} wp#{pid}")
+            for slot, err in res.failed:
+                print(f"  失敗: {slot} {err}")
+            failed |= bool(res.failed)
+        if args.action in ("run", "push"):
+            n, errors = official.push(cfg, conn, wp)
+            print(f"WP に予約 {n} 本" + (f" / 失敗 {len(errors)} 件" if errors else ""))
+            for e in errors:
+                print(f"  失敗: {e}")
+            failed |= bool(errors)
+        if args.action in ("run", "sync"):
+            print(f"結果を読んだ {official.sync(conn, wp)} 本")
+        if args.action == "run" and official.measure_due(conn):
+            args.action = "measure"  # 週1回（前回から7日）
+        if args.action == "measure":
+            from yadokari.sns import x as xapi
+
+            keys = xapi.keys_from_env() if os.environ.get("X_API_KEY") else None
+            out = official.measure(conn, wp, keys)
+            print(f"測った {out['posts']} 本" + "".join(f"\n  失敗: {e}" for e in out["errors"]))
+            print(official.weekly_summary(conn))
+        if args.action == "report":
+            print(official.weekly_summary(conn))
+    finally:
+        wp.close()
+        conn.close()
+    return 1 if failed else 0
+
+
 def _cmd_x(cfg, args) -> int:
     """公開済みの記事を、こちらから X に投稿する（例外用。ふだんは WP が公開の瞬間に投稿）。"""
     from yadokari.db.repository import get_draft
@@ -423,6 +472,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("draft_id", type=int)
     p.add_argument("--dry-run", action="store_true")
     p.set_defaults(func=_cmd_x)
+
+    p = sub.add_parser("sns", help="公式 SNS（X・Threads）の文面づくり・予約・計測")
+    p.add_argument("action", choices=["run", "plan", "push", "sync", "measure", "report"])
+    p.add_argument("--limit", type=int, default=8, help="1回に作る文面の上限")
+    p.set_defaults(func=_cmd_sns)
 
     p = sub.add_parser("learn", help="非承認理由からルール候補を育てる")
     p.set_defaults(func=_cmd_learn)

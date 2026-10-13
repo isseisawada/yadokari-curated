@@ -157,3 +157,22 @@ x:
   # 記事の公開と同時に X（@yadokari_mobi）へ投稿する。投稿するのは WP の mu-plugin（yadokari-curated-x.php）。
   # 2026-09-30 ユーザーが投稿文の形を確認して OK。止めるときは false（次に送る記事から投稿文を渡さない）
   enabled: true
+
+sns:
+  # 公式 SNS（X・Threads @yadokari_mobi）。2026-10-13 ユーザー指定:
+  # 1日4本。08:15・16:15 はその日の新着記事に一言、12:15・20:15 は過去記事に一言。X と Threads に同じ文面。
+  # 投稿するのは WP の mu-plugin（yadokari-curated-sns.php）。これを置くと、公開と同時の
+  # 「タイトル＋リンク」の X 投稿は止まる（置き換え）。止めるときは enabled を false
+  enabled: true
+  new_times: ["08:15", "16:15"]
+  archive_times: ["12:15", "20:15"]
+  # 最初の1週間は審査画面（/sns）で承認したものだけ出す（2026-10-13 ユーザー指定）
+  approval_until: "2026-10-21"
+  model: claude-opus-5-5
+  effort: low
+  lookahead_days: 3
+  archive_min_age_days: 60
+  repeat_after_days: 365
+  # 過去記事に使わない: セミナー・展示会（2367）・プレスリリース（2443）・ニュース（2419）
+  archive_exclude_categories: [2367, 2443, 2419]
+

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}SNS | YADOKARI{% endblock %}
+{% block sub %}
+<div class="sub">
+  <h1>SNS</h1>
+  <span class="muted">X・Threads @yadokari_mobi ／ 新着 {{ new_times|join('・') }} ・ 過去記事 {{ archive_times|join('・') }}{% if approval_until %} ／ {{ approval_until }} までは承認したものだけ出ます{% endif %}</span>
+  <div class="tabs">
+    <a href="/sns" class="{{ 'on' if view == 'next' }}">これから</a>
+    <a href="/sns?view=done" class="{{ 'on' if view == 'done' }}">出したもの</a>
+  </div>
+  {% if view == 'next' and n_draft %}
+  <form method="post" action="/sns/approve-all" onsubmit="return confirm('承認待ち {{ n_draft }} 本をすべて承認します。よろしいですか？')"><button class="approve small">承認待ち {{ n_draft }} 本をすべて承認</button></form>
+  {% endif %}
+</div>
+{% endblock %}
+{% block body %}
+<style>
+  .sday { font:800 15px "Inter","Noto Sans JP",sans-serif; margin:40px 0 14px; padding-bottom:8px; border-bottom:2px solid var(--ink); }
+  .sday:first-child { margin-top:0; }
+  .spost { display:grid; grid-template-columns:96px 1fr 260px; gap:24px; padding:20px 0; border-bottom:1px solid var(--line); }
+  .spost .when { font:800 26px/1 "Inter",sans-serif; }
+  .spost .when small { display:block; margin-top:10px; }
+  .chip { display:inline-block; font-size:12px; font-weight:700; padding:1px 10px; border-radius:999px; border:1px solid var(--ink); margin:0 6px 6px 0; }
+  .chip.new { background:var(--blue); border-color:var(--blue); color:#fff; }
+  .chip.st-draft { border-color:var(--red); color:var(--red); }
+  .chip.st-approved, .chip.st-queued { background:var(--ink); color:#fff; }
+  .chip.st-posted { background:var(--band); border-color:var(--line); }
+  .chip.st-failed { background:var(--red); border-color:var(--red); color:#fff; }
+  .chip.st-skipped { color:var(--sub); border-color:var(--line); }
+  .bubble { border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+  .bubble .who { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; margin-bottom:6px; }
+  .bubble .who i { width:24px; height:24px; border-radius:50%; background:#000; color:#fff; font:900 12px/24px "Inter",sans-serif; text-align:center; font-style:normal; }
+  .bubble textarea { border:0; padding:0; min-height:84px; resize:vertical; font-size:15px; }
+  .bubble textarea:focus { outline:none; }
+  .bubble .lnk { font-size:13px; color:var(--blue); word-break:break-all; }
+  .spost .side { font-size:13px; }
+  .spost .side .acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .spost .side form { margin:0; }
+  .count { font:500 12px "Inter",sans-serif; color:var(--sub); }
+  .count.over { color:var(--red); font-weight:700; }
+  .nums { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; font-size:13px; margin-top:8px; }
+  .nums b { font-family:"Inter",sans-serif; }
+  @media (max-width: 760px) { .spost { grid-template-columns:1fr; gap:10px; } }
+</style>
+{% set ns = namespace(day='') %}
+{% for p in rows %}
+  {% set d = p['slot_at']|local('%Y.%m.%d（%a）') %}
+  {% if d != ns.day %}<div class="sday">{{ d }}</div>{% set ns.day = d %}{% endif %}
+  <div class="spost" id="p{{ p['id'] }}">
+    <div class="when">{{ p['slot_at']|local('%H:%M') }}
+      <small><span class="chip {{ 'new' if p['kind'] == 'new' }}">{{ '新着' if p['kind'] == 'new' else '過去記事' }}</span></small>
+    </div>
+    <form method="post" action="/sns/{{ p['id'] }}" class="bubble">
+      <div class="who"><i>Y</i>YADOKARI <span class="muted">@yadokari_mobi</span></div>
+      <textarea name="text" data-count {{ 'readonly' if p['state'] in ('posted', 'failed', 'skipped') }}>{{ p['text'] }}</textarea>
+      <div class="lnk">{{ p['link'] }}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap">
+        <span class="count"></span>
+        {% if p['state'] in ('draft', 'approved', 'queued') %}
+        <span style="display:flex;gap:8px">
+          <button class="small" name="do" value="save">保存</button>
+          {% if p['state'] == 'draft' %}<button class="approve small" name="do" value="approve">承認</button>{% endif %}
+        </span>
+        {% endif %}
+      </div>
+    </form>
+    <div class="side">
+      <span class="chip st-{{ p['state'] }}">{{ state_labels[p['state']] }}</span>{% if p['pattern'] %}<span class="chip">{{ patterns.get(p['pattern'], p['pattern']) }}</span>{% endif %}
+      <div><a href="{{ p['link'] }}" target="_blank" rel="noopener">{{ p['title'] }}</a></div>
+      {% for w in (p['warnings']|fromjson or []) %}<div class="warn">{{ w }}</div>{% endfor %}
+      {% if p['error'] %}<div class="warn">{{ p['error'] }}</div>{% endif %}
+      {% set m = p['metrics']|fromjson %}
+      {% if m %}
+      <div class="nums">
+        {% if m.x %}<span>X</span><span><b>{{ m.x.impressions }}</b> 表示 ・ <b>{{ m.x.likes }}</b> いいね ・ <b>{{ m.x.clicks }}</b> クリック</span>{% endif %}
+        {% if m.threads %}<span>Threads</span><span><b>{{ m.threads.views }}</b> 表示 ・ <b>{{ m.threads.likes }}</b> いいね</span>{% endif %}
+      </div>
+      {% endif %}
+      {% if p['state'] in ('draft', 'approved', 'queued') %}
+      <div class="acts">
+        <form method="post" action="/sns/{{ p['id'] }}/redo"><button class="small">作り直す</button></form>
+        <form method="post" action="/sns/{{ p['id'] }}/skip" onsubmit="return confirm('この枠は出しません。よろしいですか？')"><button class="small">外す</button></form>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+{% else %}
+  <p class="muted">まだありません。毎時、{{ lookahead }}日先までの文面を自動で作ります。</p>
+{% endfor %}
+<script>
+// X の文字数（日本語は2、URL は23）。上限280 から URL と改行の分を引いた {{ budget }} まで
+(function () {
+  const light = [[0x0000,0x10FF],[0x2000,0x200D],[0x2010,0x201F],[0x2032,0x2037]];
+  const w = s => [...s.normalize('NFC')].reduce((n, c) => { const o = c.codePointAt(0); return n + (light.some(([a,b]) => a <= o && o <= b) ? 1 : 2); }, 0);
+  document.querySelectorAll('textarea[data-count]').forEach(t => {
+    const out = t.closest('form').querySelector('.count');
+    const up = () => { const n = w(t.value); out.textContent = `${t.value.length}字 ・ X ${n}/{{ budget }}`; out.classList.toggle('over', n > {{ budget }}); };
+    t.addEventListener('input', up); up();
+  });
+})();
+</script>
+{% endblock %}

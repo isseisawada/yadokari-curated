@@ -1,0 +1,38 @@
+name: sns
+
+# 公式 SNS（X・Threads）: 空いている枠に文面を作る → 承認済みを WordPress に予約 → 結果を読む（毎時）。
+# 投稿そのものは WordPress が時刻どおりに出す（GitHub の定期実行の遅れは効かない）。
+# 前回から7日たっていれば数字も測る（表示・いいね・クリック・フォロワー）。止めるときは config.yaml の sns.enabled を false
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "run / measure / report"
+        default: "run"
+
+concurrency:
+  group: sns
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      WP_USER: ${{ secrets.WP_USER }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[postgres]"
+      - run: python -m yadokari.cli sns "${{ inputs.action || 'run' }}"
