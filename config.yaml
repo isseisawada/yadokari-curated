@@ -168,13 +168,24 @@ sns:
   archive_times: ["12:15", "20:15"]
   # 最初の1週間は審査画面（/sns）で承認したものだけ出す（2026-10-13 ユーザー指定）
   approval_until: "2026-10-21"
-  # 文面づくりは Haiku 5.5（2026-10-13 ユーザー指定: 費用を下げる）。Haiku は server-side fallback を使えない
-  model: claude-haiku-5-5
+  # 文面づくりは Sonnet 5.5（2026-10-14 ユーザー指定: 人が書いた温度を出す。月 約$1.6 の見込み）
+  model: claude-sonnet-5-5
   effort: low
-  fallbacks: false
+  fallbacks: true
   lookahead_days: 3
   archive_min_age_days: 60
   repeat_after_days: 365
   # 過去記事に使わない: セミナー・展示会（2367）・プレスリリース（2443）・ニュース（2419）
   archive_exclude_categories: [2367, 2443, 2419]
+  # タグ: イベント（1165）・ワークショップ（141）
+  archive_exclude_tags: [1165, 141]
+  # 時期が過ぎると意味が無い・価格や在庫が変わる・内輪のお知らせ（2026-10-14 ユーザー OK）
+  archive_exclude_title: ["[0-9０-９,，.]+万円", "【募集", "【告知", "【開催", "【参加者募集", "締切", "締め切り",
+                          "キャンペーン", "プレゼント", "YADOKARI meets", "求人", "クラウドファンディング", "先行予約", "販売開始"]
+  # 2026-10-14 ユーザー指定: 新着の2本は最新のキュレーション記事、過去記事の2本はインタビュー記事を増やす
+  # （インタビュー → 対談 → オーナーインタビュー（2182）の順に探し、使い切ったら全記事から）
+  archive_pools:
+    - {search: "インタビュー"}
+    - {search: "対談"}
+    - {categories: "2182"}
 
