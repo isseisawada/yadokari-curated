@@ -168,8 +168,10 @@ sns:
   archive_times: ["12:15", "20:15"]
   # 最初の1週間は審査画面（/sns）で承認したものだけ出す（2026-10-13 ユーザー指定）
   approval_until: "2026-10-21"
-  model: claude-opus-5-5
+  # 文面づくりは Haiku 5.5（2026-10-13 ユーザー指定: 費用を下げる）。Haiku は server-side fallback を使えない
+  model: claude-haiku-5-5
   effort: low
+  fallbacks: false
   lookahead_days: 3
   archive_min_age_days: 60
   repeat_after_days: 365
