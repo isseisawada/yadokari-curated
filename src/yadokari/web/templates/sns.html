@@ -30,7 +30,7 @@
   .bubble { border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
   .bubble .who { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; margin-bottom:6px; }
   .bubble .who i { width:24px; height:24px; border-radius:50%; background:#000; color:#fff; font:900 12px/24px "Inter",sans-serif; text-align:center; font-style:normal; }
-  .bubble textarea { border:0; padding:0; min-height:84px; resize:vertical; font-size:15px; }
+  .bubble textarea { border:0; padding:0; min-height:84px; resize:none; overflow:hidden; font-size:15px; }
   .bubble textarea:focus { outline:none; }
   /* 記事のカードは小さく（2026-10-14 ユーザー指摘: 画像が大きすぎる）。左に小さな画像、右にタイトル */
   .bubble .ogcard { display:flex; align-items:center; gap:10px; margin-top:10px; border:1px solid var(--line); border-radius:10px; overflow:hidden; text-decoration:none; height:64px; }
@@ -101,6 +101,9 @@
   const w = s => [...s.normalize('NFC')].reduce((n, c) => { const o = c.codePointAt(0); return n + (light.some(([a,b]) => a <= o && o <= b) ? 1 : 2); }, 0);
   document.querySelectorAll('textarea[data-count]').forEach(t => {
     const out = t.closest('form').querySelector('.count');
+    // 文面は全部見えるように、中身に合わせて高さを伸ばす
+    const fit = () => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; };
+    t.addEventListener('input', fit); fit();
     const up = () => { const n = w(t.value); out.textContent = `${t.value.length}字 ・ X ${n}/{{ budget }}`; out.classList.toggle('over', n > {{ budget }}); };
     t.addEventListener('input', up); up();
   });
