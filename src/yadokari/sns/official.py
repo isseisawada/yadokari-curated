@@ -112,6 +112,7 @@ class Source:
     link: str
     title: str
     text: str
+    image: str | None = None
 
 
 @dataclass
@@ -170,14 +171,14 @@ def new_article_for(config: Config, conn: DbConnection, slot: datetime) -> Sourc
     """その枠の15分前に公開される、こちらの記事（予約済みの下書き）。"""
     publish = slot - timedelta(minutes=config.sns.new_offset_min)
     row = conn.execute(
-        "SELECT d.wp_post_id, d.title, d.body_html FROM drafts d"
+        "SELECT d.wp_post_id, d.title, d.body_html, d.featured_image FROM drafts d"
         " WHERE d.state IN ('scheduled', 'published') AND d.scheduled_at = ? AND d.wp_post_id IS NOT NULL",
         (publish.isoformat(),),
     ).fetchone()
     if row is None:
         return None
     return Source(wp_post_id=int(row["wp_post_id"]), link=magazine_link(config, int(row["wp_post_id"])),
-                  title=row["title"], text=plain_text(row["body_html"] or ""))
+                  title=row["title"], text=plain_text(row["body_html"] or ""), image=row["featured_image"])
 
 
 def used_recently(config: Config, conn: DbConnection, now: datetime) -> set[int]:
@@ -201,7 +202,7 @@ def archive_article(config: Config, wp, used: set[int], now: datetime,
     rng = rng or random.Random()
     skip = skip or set()
     before = (now - timedelta(days=config.sns.archive_min_age_days)).strftime("%Y-%m-%dT%H:%M:%S")
-    base = {"before": before, "per_page": 20, "_fields": "id,link,title,content"}
+    base = {"before": before, "per_page": 20, "_fields": "id,link,title,content,featured_media"}
     if config.sns.archive_after:
         base["after"] = f"{config.sns.archive_after}T00:00:00"
     if config.sns.archive_exclude_categories:
@@ -223,8 +224,14 @@ def archive_article(config: Config, wp, used: set[int], now: datetime,
                 text = plain_text(p.get("content", {}).get("rendered", ""))
                 if len(text) < 400:
                     continue
+                image = None
+                if p.get("featured_media"):
+                    try:
+                        image = wp.media_url(int(p["featured_media"]))
+                    except Exception:  # noqa: BLE001 - 画像は審査画面で見せるだけ
+                        image = None
                 return Source(wp_post_id=pid, link=p.get("link") or magazine_link(config, pid),
-                              title=title, text=text)
+                              title=title, text=text, image=image)
     return None
 
 
@@ -356,9 +363,10 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
             continue
         state = "draft" if (out["warnings"] or needs_approval(config, slot)) else "approved"
         conn.execute(
-            "INSERT INTO sns_posts (kind, slot_at, wp_post_id, link, title, text, ai_text, pattern, warnings, model,"
-            " state, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (kind, slot.isoformat(), src.wp_post_id, src.link, src.title, out["text"], out["text"], out["pattern"],
+            "INSERT INTO sns_posts (kind, slot_at, wp_post_id, link, title, text, ai_text, image, pattern, warnings,"
+            " model, state, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (kind, slot.isoformat(), src.wp_post_id, src.link, src.title, out["text"], out["text"], src.image,
+             out["pattern"],
              json.dumps(out["warnings"], ensure_ascii=False), config.sns.model, state, now_iso(),
              now_iso() if state == "approved" else None),
         )
