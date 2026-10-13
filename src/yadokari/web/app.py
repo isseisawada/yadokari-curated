@@ -448,13 +448,11 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
                 return back("/sns", err=f"WordPress の予約を取り消せませんでした: {exc}")
             finally:
                 wp.close()
-        return back("/sns", msg="外しました。この枠は出しません")
+        return back("/sns", msg="外しました。次の毎時の実行で別の記事を作って、確認に回します")
 
     @app.post("/sns/{post_id}/redo")
     def sns_redo(post_id: int):
         """消して、次の毎時の実行で作り直させる（同じ枠・別の文面。過去記事なら別の記事になることもある）。"""
-        from yadokari.sns.official import cancel
-
         with db() as conn:
             row = conn.execute("SELECT state FROM sns_posts WHERE id = ?", (post_id,)).fetchone()
             if row is None or row["state"] not in ("draft", "approved", "queued"):
@@ -462,7 +460,7 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
             if row["state"] == "queued":
                 wp = sns_wp()
                 try:
-                    cancel(conn, wp, post_id)
+                    wp.sns_upsert({"key": post_id, "cancel": True})
                 except Exception as exc:  # noqa: BLE001
                     return back("/sns", err=f"WordPress の予約を取り消せませんでした: {exc}")
                 finally:

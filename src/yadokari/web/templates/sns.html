@@ -116,7 +116,7 @@
     <div class="sp-acts">
       <div class="go"><button class="approve" form="f{{ p['id'] }}" name="do" value="approve">承認</button></div>
       <form class="sub2" method="post" action="/sns/{{ p['id'] }}/redo"><button>作り直す</button></form>
-      <form class="sub2" method="post" action="/sns/{{ p['id'] }}/skip" onsubmit="return confirm('この枠は出しません。よろしいですか？')"><button>外す</button></form>
+      <form class="sub2" method="post" action="/sns/{{ p['id'] }}/skip" onsubmit="return confirm('この記事は外して、別の記事を作り直します。よろしいですか？')"><button>外す</button></form>
     </div>
     {% endif %}
   </article>

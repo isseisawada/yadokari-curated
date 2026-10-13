@@ -182,9 +182,11 @@ def new_article_for(config: Config, conn: DbConnection, slot: datetime) -> Sourc
 
 
 def used_recently(config: Config, conn: DbConnection, now: datetime) -> set[int]:
+    """最近使った記事と、人が外した記事（外したものは二度と出さない）。"""
     since = (now - timedelta(days=config.sns.repeat_after_days)).isoformat()
-    return {int(r["wp_post_id"]) for r in conn.execute(
-        "SELECT wp_post_id FROM sns_posts WHERE slot_at > ? AND state != 'skipped'", (since,)).fetchall()}
+    used = {int(r["wp_post_id"]) for r in conn.execute(
+        "SELECT wp_post_id FROM sns_posts WHERE slot_at > ?", (since,)).fetchall()}
+    return used | {int(r["wp_post_id"]) for r in conn.execute("SELECT wp_post_id FROM sns_skipped").fetchall()}
 
 
 def excluded_title(config: Config, title: str) -> bool:
@@ -334,6 +336,8 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
     for slot, kind in open_slots(config, conn, now)[:limit]:
         try:
             src = new_article_for(config, conn, slot) if kind == "new" else None
+            if src is not None and src.wp_post_id in used:
+                src = None  # 新着を人が外した枠は、過去記事で埋める
             recent = [r["text"] for r in conn.execute(
                 "SELECT text FROM sns_posts ORDER BY slot_at DESC LIMIT 6").fetchall()]
             out = None
@@ -419,11 +423,18 @@ def clear_drafts(conn: DbConnection, now: datetime | None = None) -> int:
 
 
 def cancel(conn: DbConnection, wp, post_id: int) -> None:
-    """外す。WP に渡していれば取り消す。"""
-    row = conn.execute("SELECT state FROM sns_posts WHERE id = ?", (post_id,)).fetchone()
-    if row and row["state"] == "queued":
+    """外す。WP に渡していれば取り消し、行を消して枠を空ける（次の plan で別の記事が入る）。
+
+    2026-10-14 ユーザー指定: 外した本数だけ別の記事を確認に回す。外した記事は sns_skipped に残し、もう出さない。
+    """
+    row = conn.execute("SELECT * FROM sns_posts WHERE id = ?", (post_id,)).fetchone()
+    if row is None:
+        return
+    if row["state"] == "queued":
         wp.sns_upsert({"key": post_id, "cancel": True})
-    conn.execute("UPDATE sns_posts SET state = 'skipped', queued_at = NULL WHERE id = ?", (post_id,))
+    conn.execute("INSERT INTO sns_skipped (wp_post_id, slot_at, kind, title, skipped_at) VALUES (?, ?, ?, ?, ?)",
+                 (row["wp_post_id"], row["slot_at"], row["kind"], row["title"], now_iso()))
+    conn.execute("DELETE FROM sns_posts WHERE id = ?", (post_id,))
     conn.commit()
 
 

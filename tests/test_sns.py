@@ -180,7 +180,8 @@ def test_review_page_edit_approve_and_skip(config, db, tmp_path):
     too_long = "あ" * 200
     assert "err=" in client.post(f"/sns/{ids[1]}", data={"text": too_long}, follow_redirects=False).headers["location"]
     client.post(f"/sns/{ids[1]}/skip")
-    assert db.execute("SELECT state FROM sns_posts WHERE id = ?", (ids[1],)).fetchone()["state"] == "skipped"
+    assert db.execute("SELECT 1 FROM sns_posts WHERE id = ?", (ids[1],)).fetchone() is None
+    assert db.execute("SELECT COUNT(*) AS n FROM sns_skipped").fetchone()["n"] == 1
     client.post("/sns/approve-all")
     assert db.execute("SELECT state FROM sns_posts WHERE id = ?", (ids[2],)).fetchone()["state"] == "approved"
     client.post(f"/sns/{ids[2]}/redo")
@@ -277,3 +278,29 @@ def test_card_image_is_kept_for_the_review_page(config, db):
         p["featured_media"] = 7
     official.plan(cfg, db, wp=wp, client=FakeLLM(good()), now=NOW, limit=1)
     assert db.execute("SELECT image FROM sns_posts").fetchone()["image"].endswith("/7.jpg")
+
+
+def test_skipped_slot_is_refilled_with_another_article(config, db):
+    """外した本数だけ、別の記事で作り直して確認に回す（2026-10-14 ユーザー指定）。"""
+    cfg = sns_config(config)
+    add_scheduled_draft(db, datetime(2026, 10, 13, 7, 0, tzinfo=UTC))
+    wp = FakeSnsWP()
+    official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(3)]), now=NOW, limit=3,
+                  rng=random.Random(1))
+    rows = db.execute("SELECT * FROM sns_posts ORDER BY slot_at").fetchall()
+    archive, new = rows[0], rows[1]
+    assert new["kind"] == "new"
+    wp.queue[archive["id"]] = {"key": archive["id"]}
+    db.execute("UPDATE sns_posts SET state = 'queued' WHERE id = ?", (archive["id"],))
+    official.cancel(db, wp, archive["id"])
+    official.cancel(db, wp, new["id"])
+    assert archive["id"] not in wp.queue  # WP の予約も取り消す
+    res = official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(3)]), now=NOW, limit=2,
+                        rng=random.Random(1))
+    assert len(res.created) == 2
+    again = {r["slot_at"]: r for r in db.execute("SELECT * FROM sns_posts").fetchall()}
+    # 同じ枠に、外した記事とは別の記事が承認待ちで入る。新着を外した枠は過去記事で埋める
+    assert again[archive["slot_at"]]["wp_post_id"] != archive["wp_post_id"]
+    assert again[new["slot_at"]]["kind"] == "archive"
+    assert again[new["slot_at"]]["wp_post_id"] not in (900, archive["wp_post_id"])
+    assert {again[archive["slot_at"]]["state"], again[new["slot_at"]]["state"]} == {"draft"}
