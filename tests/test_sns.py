@@ -49,6 +49,9 @@ class FakeSnsWP:
 
 
 def sns_config(config, until="2026-10-14"):
+    # 仕組みのテストは過去記事2枠で（本番の config は 2026-10-14 から20:15の1枠）
+    assert config.sns.archive_times == ["20:15"] and config.sns.new_times == ["08:15", "16:15"]
+    config.sns.archive_times = ["12:15", "20:15"]
     config.sns.enabled = True
     config.sns.approval_until = until
     config.sns.lookahead_days = 1
