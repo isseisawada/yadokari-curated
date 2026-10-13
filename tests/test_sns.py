@@ -232,3 +232,19 @@ def test_archive_prefers_interviews_and_skips_excluded_and_unusable(config, db):
     assert len(llm.calls) == 2  # 430万円の物件は AI に見せる前に外れる
     first_title = llm.calls[0]["messages"][0]["content"]
     assert "430万円" not in first_title
+
+
+def test_human_edits_become_examples_and_ai_words_are_retried(config, db):
+    cfg = sns_config(config, until=None)
+    official.plan(cfg, db, wp=FakeSnsWP(), client=FakeLLM(good()), now=NOW, limit=1)
+    db.execute("UPDATE sns_posts SET text = '人が直した文。いいなあ。', state = 'approved'")
+    db.commit()
+    assert official.edits(db) == [(good()["text"], "人が直した文。いいなあ。")]
+    ai_ish = good(text="広さ12平方メートルのトレーラーハウス。暮らしの余白が豊かに広がる。")
+    llm = FakeLLM(ai_ish, good())
+    official.plan(cfg, db, wp=FakeSnsWP(), client=llm, now=NOW, limit=1)
+    first = llm.calls[0]["messages"][0]["content"]
+    assert "編集部が AI の案をこう直した" in first and "人が直した文。いいなあ。" in first
+    assert "余白" in llm.calls[1]["messages"][-1]["content"]  # AIっぽい言葉は1回書き直させる
+    row = db.execute("SELECT * FROM sns_posts ORDER BY id DESC").fetchone()
+    assert row["text"] == good()["text"] and row["ai_text"] == good()["text"]

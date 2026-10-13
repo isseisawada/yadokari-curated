@@ -41,17 +41,25 @@ PATTERNS = {
 TEXT_BUDGET = LIMIT - URL_WEIGHT - 2  # X: URL の前の改行2つ
 
 # トーン＆マナーは上杉さんの X（@LIFE_W…）の投稿に合わせる（2026-10-13 ユーザー指定。画面の写しから分析）
-SYSTEM = """あなたは YADOKARI（小さな住まい・タイニーハウス・これからの暮らし方のメディア）の公式SNSの編集者です。
-渡された記事から、X と Threads に同じ文面で出す投稿を1本書きます。
+# 2026-10-14: もっと人がコメントしている温度に。心が動いた一点だけ・AIっぽい言葉を使わない・
+# 人が直した例から学ぶ（edits）・書くのは Sonnet 5.5
+SYSTEM = """あなたは YADOKARI（小さな住まい・タイニーハウス・これからの暮らし方のメディア）の編集部の一人です。
+記事を読んで、思わず誰かに言いたくなったことを、X と Threads に自分の言葉で投稿します。
+要約や紹介文ではなく、「読んだ人のひとこと」です。
 
-形（2段落。段落のあいだは空行1つ）:
-1段落目 = 事実。どこの・何が・どんなものかを1〜2文で。体言止めを使ってよい。物件名は「」で入れる。
-2段落目 = 気づき。短い文を2〜3行、1文ごとに改行する。
-  - 書き手が心を動かされた、という温度で書く。「〜だと思う。」「すごく〜。」で言い切ってよい
-  - 対句（「昼は道具小屋、夜は光の彫刻。」）、言い換え（「小さいからこそ、〜」）、問い（「家は建てるもの、と誰が決めたんだろう。」）が効く
-  - 説教・まとめ・教訓にしない。暮らしや住まいの見え方が少し変わる一言にする
+いちばん大事なこと:
+- 記事全体をまとめない。読んでいて「へえ」「いいな」と引っかかった細部を一つだけ選び、そこから書く
+  （例: 寝室の広さではなく「シンクの横にワインが注げる蛇口がある」のような具体）
+- その細部に、あなたが素直にどう感じたかを添える。感想は短く、言い切る
 
-お手本（この温度と形に合わせる）:
+形（毎回同じにしない）:
+- 基本は2段落。1段落目に事実（どこの・何が。物件名や人の名前は「」）、空行、2段落目に感じたこと2〜3行（1文ごとに改行）
+- ときどき、事実1文＋ひとこと1行だけの短い投稿にしてよい
+- 文末を揃えない。「〜だと思う。」は1投稿に1回まで、続けて使わない。
+  「いいなあ。」「これはずるい。」「正直、住みたい。」「〜らしい。」「〜なんだよね。」「〜ってすごい。」のような素の反応も使う
+- 対句・言い換え・自分への問いかけは効くが、毎回は使わない
+
+お手本（この温度に合わせる。言い回しは真似しない）:
 ---
 ニュージーランドの森に、夜になるとランタンのように灯る小屋がある。「Nightlight Shed」。
 
@@ -66,18 +74,23 @@ SYSTEM = """あなたは YADOKARI（小さな住まい・タイニーハウス�
 小さいからこそ、暮らしの出入りが全部見える。
 それって、すごく健やかなことだと思う。
 ---
-神奈川・藤野、東京から車で約1時間の山あいにトレーラーハウス2台。アーティストの創作と滞在の拠点「inou studio」
+家は建てるもの、と誰が決めたんだろう。
 
-つくる場所と、眠る場所が、森の中で隣り合う。
-大きな建物がなくても、人が集まる理由はちゃんと生まれる。
+置いて、動かして、また置く。
+季節や人生に合わせて、暮らしを変えていい。
 ---
 
+使わない言葉・型（AIの文章に見える）:
+「余白」「豊か」「寄り添う」「紡ぐ」「体現」「魅力」「素敵」「〜という選択肢」「〜こそ」の多用、
+「〜のかもしれない」の多用、「そんな〜」で締める、「〜してみてはいかがでしょうか」、記事の宣伝・告知の言い回し（「ぜひ」「チェック」「詳しくはこちら」）
+
 決まり:
-- 全体で80〜120字（改行を除く）。絵文字・ハッシュタグ・URL・「！」は使わない
+- 全体で60〜120字（改行を除く）。絵文字・ハッシュタグ・URL・「！」は使わない
 - 事実は記事に書いてあることだけ。記事に無い数字を書かない。換算もしない（㎡→畳 など）
-- お手本の言い回しをそのまま使い回さない（「すごく美しい」「健やか」を毎回使わない）
-- 記事のタイトルをなぞらない
-- 宣伝・告知の言い回し（「ぜひ」「チェック」「詳しくはこちら」）は使わない"""
+- 記事のタイトルをなぞらない"""
+
+# 使ったら書き直させる言葉（AIっぽさ）。検算と違って、直らなくても承認待ちにはしない
+AI_WORDS = ["余白", "豊か", "寄り添", "紡", "体現", "魅力", "素敵", "という選択肢", "いかがでしょうか"]
 
 SCHEMA = {
     "type": "object",
@@ -240,7 +253,16 @@ def hints(conn: DbConnection, now: datetime, days: int = 28) -> str:
     return f"最近よく読まれた型: {best}。伸びなかった型: {worst}。よく読まれた型を優先してよいが、毎回同じにはしない。"
 
 
-def write(config: Config, src: Source, client, *, hint: str = "", recent: list[str] | None = None) -> dict:
+def edits(conn: DbConnection, limit: int = 5) -> list[tuple[str, str]]:
+    """人が審査画面で直した文面（AI の案, 直した文）。新しい順。"""
+    rows = conn.execute(
+        "SELECT ai_text, text FROM sns_posts WHERE ai_text IS NOT NULL AND text <> ai_text"
+        " AND state IN ('approved', 'queued', 'posted') ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return [(r["ai_text"], r["text"]) for r in rows]
+
+
+def write(config: Config, src: Source, client, *, hint: str = "", recent: list[str] | None = None,
+          fixes: list[tuple[str, str]] | None = None) -> dict:
     """文面を書かせて検算する。{"text","pattern","warnings"}。"""
     from yadokari.llm import call_json, make_client
 
@@ -253,6 +275,10 @@ def write(config: Config, src: Source, client, *, hint: str = "", recent: list[s
         user += f"\n\n{hint}"
     if recent:
         user += "\n\n最近の投稿（書き出しや言い回しを重ねない）:\n" + "\n".join(f"- {t}" for t in recent[:6])
+    if fixes:
+        # 人が直した例から、編集部の声に寄せる（2026-10-14 ユーザー指定）
+        user += "\n\n編集部が AI の案をこう直した（この直し方の方向に寄せる）:\n" + "\n".join(
+            f"--- AI の案\n{a}\n--- 直した文\n{b}" for a, b in fixes)
     messages = [{"role": "user", "content": user}]
     data: dict = {}
     problems: list[str] = []
@@ -268,11 +294,15 @@ def write(config: Config, src: Source, client, *, hint: str = "", recent: list[s
             problems.append(f"長すぎる（X の重みで {weight(text)}／上限 {TEXT_BUDGET}）")
         if re.search(r"https?://|#", text):
             problems.append("URL かハッシュタグが入っている")
+        style = [w for w in AI_WORDS if w in text]
+        if style and attempt == 0:
+            problems.append(f"使わない言葉が入っている: {'、'.join(style)}")
         if not problems:
             break
         if attempt == 0:
             messages += [{"role": "assistant", "content": json.dumps(data, ensure_ascii=False)},
                          {"role": "user", "content": "直してください: " + "／".join(problems)}]
+    problems = [p for p in problems if not p.startswith("使わない言葉")]
     return {"text": str(data.get("text", "")).strip(), "pattern": data.get("pattern"),
             "usable": data.get("usable", True) is not False, "reason": str(data.get("reason", "")),
             "warnings": problems}
@@ -294,6 +324,7 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
     now = now or datetime.now(UTC)
     used = used_recently(config, conn, now)
     hint = hints(conn, now)
+    fixes = edits(conn)
     for slot, kind in open_slots(config, conn, now)[:limit]:
         try:
             src = new_article_for(config, conn, slot) if kind == "new" else None
@@ -301,7 +332,7 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
                 "SELECT text FROM sns_posts ORDER BY slot_at DESC LIMIT 6").fetchall()]
             out = None
             if src is not None:
-                out = write(config, src, client, hint=hint, recent=recent)
+                out = write(config, src, client, hint=hint, recent=recent, fixes=fixes)
             else:
                 # 過去記事は、AI が「今読んでも成り立たない」と言ったら別の記事にする（3本まで）
                 kind = "archive"
@@ -310,7 +341,7 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
                     src = archive_article(config, wp, used, now, rng=rng, skip=rejected)
                     if src is None:
                         break
-                    out = write(config, src, client, hint=hint, recent=recent)
+                    out = write(config, src, client, hint=hint, recent=recent, fixes=fixes)
                     if out["usable"]:
                         break
                     log.info("過去記事を外しました: wp#%s %s", src.wp_post_id, out["reason"])
@@ -326,9 +357,9 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
             continue
         state = "draft" if (out["warnings"] or needs_approval(config, slot)) else "approved"
         conn.execute(
-            "INSERT INTO sns_posts (kind, slot_at, wp_post_id, link, title, text, pattern, warnings, model,"
-            " state, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (kind, slot.isoformat(), src.wp_post_id, src.link, src.title, out["text"], out["pattern"],
+            "INSERT INTO sns_posts (kind, slot_at, wp_post_id, link, title, text, ai_text, pattern, warnings, model,"
+            " state, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (kind, slot.isoformat(), src.wp_post_id, src.link, src.title, out["text"], out["text"], out["pattern"],
              json.dumps(out["warnings"], ensure_ascii=False), config.sns.model, state, now_iso(),
              now_iso() if state == "approved" else None),
         )
