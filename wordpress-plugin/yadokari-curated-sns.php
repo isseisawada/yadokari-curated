@@ -2,7 +2,7 @@
 /**
  * Plugin Name: YADOKARI CURATED SNS
  * Description: 公式 SNS（X・Threads @yadokari_mobi）へ、決めた時刻に投稿する。文面は yadokari-curated が作って REST で渡す。
- * Version: 1.0
+ * Version: 1.1
  *
  * 置き場所: wp-content/mu-plugins/yadokari-curated-sns.php（有効化の操作は要らない）
  * 前提: yadokari-curated-x.php（X の投稿関数 yc_x_post と鍵 YC_X_*）が同じ mu-plugins にあること
@@ -16,7 +16,8 @@
  *                            {key, cancel: true}                      取り消す
  * - GET  /wp-json/yc/v1/sns?keys=1,2,3                               結果（投稿 ID・エラー）
  * - GET  /wp-json/yc/v1/sns/metrics?threads=ID,ID                    Threads の数字とフォロワー数
- * - 時刻になったら X と Threads に「本文＋改行2つ＋URL」を投稿（URL の utm_source を x / threads に）
+ * - 時刻になったら X に「本文＋改行2つ＋URL」、Threads に「本文」＋リンクのカード（link_attachment）を投稿
+ *   （URL の utm_source を x / threads に）。どちらも記事のアイキャッチ（og:image）付きのカードになる
  * - kind=new（新着記事）は、記事がまだ公開されていなければ15分待つ（最大2時間）
  * - 1件1回だけ（yc_sns_x_id / yc_sns_th_id があれば投稿しない）
  * - これを置くと、yadokari-curated-x.php の「公開と同時の X 投稿（タイトル＋リンク）」は止まる
@@ -174,14 +175,18 @@ function yc_threads_get($path, $args = array()) {
     return $body;
 }
 
-function yc_threads_post($text) {
+function yc_threads_post($text, $link = '') {
     $token = yc_threads_token();
     if (!$token) {
         return new WP_Error('yc_threads', 'wp-config.php に YC_THREADS_TOKEN がありません');
     }
     $base = 'https://graph.threads.net/v1.0/me';
-    $res = wp_remote_post($base . '/threads', array('timeout' => 20, 'body' => array(
-        'media_type' => 'TEXT', 'text' => $text, 'access_token' => $token)));
+    // 1.1: リンクは link_attachment で渡す（記事のアイキャッチ付きのカードになる）
+    $params = array('media_type' => 'TEXT', 'text' => $text, 'access_token' => $token);
+    if ($link) {
+        $params['link_attachment'] = $link;
+    }
+    $res = wp_remote_post($base . '/threads', array('timeout' => 20, 'body' => $params));
     $body = is_wp_error($res) ? null : json_decode(wp_remote_retrieve_body($res), true);
     if (empty($body['id'])) {
         return new WP_Error('yc_threads', 'Threads（作成）: ' . (is_wp_error($res) ? $res->get_error_message() : substr(wp_remote_retrieve_body($res), 0, 300)));
@@ -258,7 +263,7 @@ add_action('yc_sns_fire', function ($id) {
         }
     }
     if (!get_post_meta($id, 'yc_sns_th_id', true)) {
-        $r = yc_threads_post($text . "\n\n" . yc_sns_url_for($url, 'threads'));
+        $r = yc_threads_post($text, yc_sns_url_for($url, 'threads'));
         if (is_wp_error($r)) {
             $errors[] = $r->get_error_message();
         } else {

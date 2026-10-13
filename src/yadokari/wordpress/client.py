@@ -174,6 +174,11 @@ class WordPressClient:
         data = self._check(r)
         return data, int(r.headers.get("X-WP-TotalPages", "1") or 1)
 
+    def media_url(self, media_id: int) -> str | None:
+        """メディアの画像 URL（アイキャッチ）。"""
+        data = self._check(self._http.get(f"{self.api}/media/{media_id}", params={"_fields": "source_url"}))
+        return data.get("source_url")
+
     # --- 公式 SNS の予約（mu-plugin yadokari-curated-sns.php） --------
     @property
     def _sns(self) -> str:

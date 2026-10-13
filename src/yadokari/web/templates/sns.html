@@ -32,7 +32,9 @@
   .bubble .who i { width:24px; height:24px; border-radius:50%; background:#000; color:#fff; font:900 12px/24px "Inter",sans-serif; text-align:center; font-style:normal; }
   .bubble textarea { border:0; padding:0; min-height:84px; resize:vertical; font-size:15px; }
   .bubble textarea:focus { outline:none; }
-  .bubble .lnk { font-size:13px; color:var(--blue); word-break:break-all; }
+  .bubble .ogcard { display:block; margin-top:10px; border:1px solid var(--line); border-radius:12px; overflow:hidden; text-decoration:none; }
+  .bubble .ogcard img { display:block; width:100%; aspect-ratio:1.91/1; object-fit:cover; background:var(--band); }
+  .bubble .ogcard span { display:block; padding:6px 12px; font-size:12px; color:var(--sub); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .spost .side { font-size:13px; }
   .spost .side .acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
   .spost .side form { margin:0; }
@@ -53,7 +55,10 @@
     <form method="post" action="/sns/{{ p['id'] }}" class="bubble">
       <div class="who"><i>Y</i>YADOKARI <span class="muted">@yadokari_mobi</span></div>
       <textarea name="text" data-count {{ 'readonly' if p['state'] in ('posted', 'failed', 'skipped') }}>{{ p['text'] }}</textarea>
-      <div class="lnk">{{ p['link'] }}</div>
+      <a class="ogcard" href="{{ p['link'] }}" target="_blank" rel="noopener">
+        {% if p['image'] %}<img src="{{ p['image'] }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+        <span>yadokari.net ・ {{ p['title'] }}</span>
+      </a>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap">
         <span class="count"></span>
         {% if p['state'] in ('draft', 'approved', 'queued') %}

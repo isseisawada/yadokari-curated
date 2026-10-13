@@ -41,6 +41,9 @@ class FakeSnsWP:
         return {str(k): {"state": "posted", "x_id": f"x{k}", "threads_id": f"t{k}",
                          "posted_at": NOW.isoformat()} for k in keys if k in self.queue}
 
+    def media_url(self, media_id):
+        return f"https://yadokari.net/wp-content/uploads/{media_id}.jpg"
+
     def sns_metrics(self, ids):
         return {"posts": {i: {"views": 100, "likes": 3} for i in ids}, "followers": 50}
 
@@ -265,3 +268,12 @@ def test_archive_after_is_sent(config, db):
 
     official.plan(cfg, db, wp=AfterWP(), client=FakeLLM(good()), now=NOW, limit=1)
     assert seen and set(seen) == {"2020-01-01T00:00:00"}
+
+
+def test_card_image_is_kept_for_the_review_page(config, db):
+    cfg = sns_config(config, until=None)
+    wp = FakeSnsWP()
+    for p in wp.archive:
+        p["featured_media"] = 7
+    official.plan(cfg, db, wp=wp, client=FakeLLM(good()), now=NOW, limit=1)
+    assert db.execute("SELECT image FROM sns_posts").fetchone()["image"].endswith("/7.jpg")
