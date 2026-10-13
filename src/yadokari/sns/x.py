@@ -51,7 +51,7 @@ def compose(cfg: XConfig, *, title: str, prefix: str, quote: str, tags: list[str
 # こちらから直接投稿する（例外用。ふだんは WP の mu-plugin が公開の瞬間に投稿する）
 # 2026-09-30: X を入れる前に公開済みだった記事を、ユーザーの指示で後から投稿するために追加
 # ----------------------------------------------------------------------
-def _oauth_header(method: str, url: str, keys: dict[str, str]) -> str:
+def _oauth_header(method: str, url: str, keys: dict[str, str], query: dict[str, str] | None = None) -> str:
     import base64
     import hashlib
     import hmac
@@ -70,7 +70,9 @@ def _oauth_header(method: str, url: str, keys: dict[str, str]) -> str:
         "oauth_token": keys["access_token"],
         "oauth_version": "1.0",
     }
-    params = "&".join(f"{enc(k)}={enc(v)}" for k, v in sorted(oauth.items()))
+    # GET のクエリも署名に入れる（OAuth 1.0a の決まり。JSON の本文は入れない）
+    signed = {**oauth, **(query or {})}
+    params = "&".join(f"{enc(k)}={enc(v)}" for k, v in sorted(signed.items()))
     base = "&".join([method, enc(url), enc(params)])
     key = f"{enc(keys['api_secret'])}&{enc(keys['access_secret'])}"
     oauth["oauth_signature"] = base64.b64encode(
@@ -105,3 +107,20 @@ def post(text: str, keys: dict[str, str], http=None) -> str:
     if r.status_code != 201:
         raise RuntimeError(f"X API {r.status_code}: {r.text[:300]}")
     return str(r.json()["data"]["id"])
+
+
+def get(path: str, query: dict[str, str], keys: dict[str, str], http=None) -> dict:
+    """X API v2 の読み取り（自分の投稿の数字など）。path は /2/... 。"""
+    import httpx
+
+    url = "https://api.x.com" + path
+    client = http or httpx.Client(timeout=20)
+    try:
+        r = client.get(url, params=query,
+                       headers={"Authorization": _oauth_header("GET", url, keys, query)})
+    finally:
+        if http is None:
+            client.close()
+    if r.status_code != 200:
+        raise RuntimeError(f"X API {r.status_code}: {r.text[:300]}")
+    return r.json()

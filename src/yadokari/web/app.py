@@ -7,6 +7,7 @@
     /drafts/{id}        下書きの編集・日時指定・WordPress に送る
     /manual             手動投入（規約で自動収集を禁じているサイト用。ページは取得しない）
     /rules              学習ループのルール候補（人が承認したものだけ採点に効く）
+    /sns                公式 SNS（X・Threads）の投稿。文面の確認・承認・作り直し
     /healthz            認証なし。DB に触らない
 
 **WordPress に送るのはボタンを押したときだけ。** 予約（status=future）は
@@ -371,6 +372,104 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
         if res.missed:
             return back("/drafts", err=msg + f"。予約時刻を過ぎても公開されていないものが {len(res.missed)} 件あります（WP の予約投稿の失敗）")
         return back("/drafts", msg=msg)
+
+    # ------------------------------------------------------------------
+    # 公式 SNS（2026-10-13 ユーザー指定）
+    # ------------------------------------------------------------------
+    def sns_wp():
+        from yadokari.wordpress.client import WordPressClient
+
+        return wp_factory() if wp_factory else WordPressClient(config.wordpress)
+
+    @app.get("/sns", response_class=HTMLResponse)
+    def sns_list(request: Request, view: str = "next"):
+        from yadokari.sns.official import PATTERNS, TEXT_BUDGET
+
+        now = datetime.now(UTC)
+        with db() as conn:
+            if view == "done":
+                rows = conn.execute(
+                    "SELECT * FROM sns_posts WHERE slot_at <= ? OR state IN ('posted', 'failed')"
+                    " ORDER BY slot_at DESC LIMIT 120", (now.isoformat(),)).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM sns_posts WHERE slot_at > ? AND state NOT IN ('posted', 'failed')"
+                    " ORDER BY slot_at", (now.isoformat(),)).fetchall()
+        n_draft = sum(1 for r in rows if r["state"] == "draft" and view != "done")
+        labels = {"draft": "承認待ち", "approved": "承認済み", "queued": "予約済み", "posted": "投稿済み",
+                  "failed": "失敗", "skipped": "外した"}
+        return render(request, "sns.html", rows=rows, view=view, n_draft=n_draft, state_labels=labels,
+                      patterns={k: v.split("（")[0] for k, v in PATTERNS.items()}, budget=TEXT_BUDGET,
+                      new_times=config.sns.new_times, archive_times=config.sns.archive_times,
+                      approval_until=config.sns.approval_until, lookahead=config.sns.lookahead_days)
+
+    @app.post("/sns/approve-all")
+    def sns_approve_all():
+        with db() as conn:
+            n = conn.execute(
+                "UPDATE sns_posts SET state = 'approved', approved_at = ? WHERE state = 'draft' AND slot_at > ?"
+                " AND (warnings IS NULL OR warnings = '[]')",
+                (datetime.now(UTC).isoformat(), datetime.now(UTC).isoformat())).rowcount
+            conn.commit()
+            left = conn.execute("SELECT COUNT(*) AS n FROM sns_posts WHERE state = 'draft' AND slot_at > ?",
+                                (datetime.now(UTC).isoformat(),)).fetchone()["n"]
+        msg = f"{n} 本を承認しました。次の毎時の実行で WordPress に予約が入ります"
+        return back("/sns", msg=msg, err=f"注意のある {left} 本は残しました（文面を直して1本ずつ承認してください）" if left else None)
+
+    @app.post("/sns/{post_id}")
+    def sns_save(post_id: int, text: str = Form(...), do: str = Form("save")):
+        from yadokari.sns.official import TEXT_BUDGET
+        from yadokari.sns.x import weight
+
+        text = text.strip()
+        if weight(text) > TEXT_BUDGET:
+            return back(f"/sns#p{post_id}", err=f"長すぎます（X の重みで {weight(text)}／上限 {TEXT_BUDGET}）")
+        with db() as conn:
+            row = conn.execute("SELECT state FROM sns_posts WHERE id = ?", (post_id,)).fetchone()
+            if row is None or row["state"] not in ("draft", "approved", "queued"):
+                return back("/sns", err="もう変えられません（投稿済み・外したもの）")
+            # 人が直したら注意は消す。予約済みなら承認済みに戻して、次の実行で WP の予約を差し替える
+            state = "approved" if do == "approve" or row["state"] != "draft" else "draft"
+            conn.execute("UPDATE sns_posts SET text = ?, warnings = '[]', state = ?,"
+                         " approved_at = COALESCE(approved_at, ?) WHERE id = ?",
+                         (text, state, datetime.now(UTC).isoformat() if state == "approved" else None, post_id))
+            conn.commit()
+        return back(f"/sns#p{post_id}", msg="承認しました" if do == "approve" else "保存しました")
+
+    @app.post("/sns/{post_id}/skip")
+    def sns_skip(post_id: int):
+        from yadokari.sns.official import cancel
+
+        wp = sns_wp()
+        with db() as conn:
+            try:
+                cancel(conn, wp, post_id)
+            except Exception as exc:  # noqa: BLE001 - 画面に出す
+                return back("/sns", err=f"WordPress の予約を取り消せませんでした: {exc}")
+            finally:
+                wp.close()
+        return back("/sns", msg="外しました。この枠は出しません")
+
+    @app.post("/sns/{post_id}/redo")
+    def sns_redo(post_id: int):
+        """消して、次の毎時の実行で作り直させる（同じ枠・別の文面。過去記事なら別の記事になることもある）。"""
+        from yadokari.sns.official import cancel
+
+        with db() as conn:
+            row = conn.execute("SELECT state FROM sns_posts WHERE id = ?", (post_id,)).fetchone()
+            if row is None or row["state"] not in ("draft", "approved", "queued"):
+                return back("/sns", err="もう変えられません")
+            if row["state"] == "queued":
+                wp = sns_wp()
+                try:
+                    cancel(conn, wp, post_id)
+                except Exception as exc:  # noqa: BLE001
+                    return back("/sns", err=f"WordPress の予約を取り消せませんでした: {exc}")
+                finally:
+                    wp.close()
+            conn.execute("DELETE FROM sns_posts WHERE id = ?", (post_id,))
+            conn.commit()
+        return back("/sns", msg="消しました。次の毎時の実行で作り直します")
 
     # ------------------------------------------------------------------
     manual_sources = [s.name for s in config.sources if s.manual_only]
