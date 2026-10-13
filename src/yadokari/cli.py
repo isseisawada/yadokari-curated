@@ -280,6 +280,11 @@ def _cmd_sns(cfg, args) -> int:
     wp = WordPressClient(cfg.wordpress)
     failed = False
     try:
+        if args.action == "redo":
+            # 承認待ちの文面を消して作り直す（書き方を変えたとき。承認済み・予約済みは触らない）
+            n = official.clear_drafts(conn)
+            print(f"承認待ちの文面を {n} 本消しました")
+            args.action = "run"
         if args.action in ("run", "plan"):
             res = official.plan(cfg, conn, wp=wp, limit=args.limit)
             print(f"文面 {len(res.created)} 本 / 失敗 {len(res.failed)} 件")
@@ -474,7 +479,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=_cmd_x)
 
     p = sub.add_parser("sns", help="公式 SNS（X・Threads）の文面づくり・予約・計測")
-    p.add_argument("action", choices=["run", "plan", "push", "sync", "measure", "report"])
+    p.add_argument("action", choices=["run", "plan", "push", "sync", "measure", "report", "redo"])
     p.add_argument("--limit", type=int, default=8, help="1回に作る文面の上限")
     p.set_defaults(func=_cmd_sns)
 

@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "run / measure / report"
+        description: "run / measure / report / redo（承認待ちを消して作り直す）"
         default: "run"
 
 concurrency:
