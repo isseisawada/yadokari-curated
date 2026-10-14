@@ -280,6 +280,14 @@ def _cmd_sns(cfg, args) -> int:
     wp = WordPressClient(cfg.wordpress)
     failed = False
     try:
+        if args.action == "check":
+            # Threads につながったか（投稿はしない。フォロワー数を読むだけ）
+            data = wp.sns_metrics([])
+            if data.get("followers") is None:
+                print("Threads: つながっていません（wp-config.php の YC_THREADS_TOKEN を確かめてください）")
+                return 1
+            print(f"Threads: つながりました（フォロワー {data['followers']}）")
+            return 0
         if args.action == "redo":
             # 承認待ちの文面を消して作り直す（書き方を変えたとき。承認済み・予約済みは触らない）
             n = official.clear_drafts(conn)
@@ -481,7 +489,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=_cmd_x)
 
     p = sub.add_parser("sns", help="公式 SNS（X・Threads）の文面づくり・予約・計測")
-    p.add_argument("action", choices=["run", "plan", "push", "sync", "measure", "report", "redo"])
+    p.add_argument("action", choices=["run", "plan", "push", "sync", "measure", "report", "redo", "check"])
     p.add_argument("--limit", type=int, default=50, help="1回に作る文面の上限")
     p.set_defaults(func=_cmd_sns)
 

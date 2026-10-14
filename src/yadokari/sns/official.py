@@ -585,17 +585,16 @@ def measure(conn: DbConnection, wp, x_keys: dict | None, now: datetime | None = 
         except Exception as exc:  # noqa: BLE001
             out["errors"].append(f"X followers: {exc}")
     th_ids = [r["threads_id"] for r in rows if r["threads_id"]]
-    if th_ids:
-        try:
-            data = wp.sns_metrics(th_ids)
-            for r in rows:
-                if r["threads_id"] in data.get("posts", {}):
-                    by_id[r["id"]]["threads"] = data["posts"][r["threads_id"]]
-            if data.get("followers") is not None:
-                conn.execute("INSERT INTO sns_stats (measured_at, platform, followers) VALUES (?, 'threads', ?)",
-                             (now_iso(), data["followers"]))
-        except Exception as exc:  # noqa: BLE001
-            out["errors"].append(f"Threads: {exc}")
+    try:  # 投稿がまだ無くてもフォロワー数は測る
+        data = wp.sns_metrics(th_ids)
+        for r in rows:
+            if r["threads_id"] in data.get("posts", {}):
+                by_id[r["id"]]["threads"] = data["posts"][r["threads_id"]]
+        if data.get("followers") is not None:
+            conn.execute("INSERT INTO sns_stats (measured_at, platform, followers) VALUES (?, 'threads', ?)",
+                         (now_iso(), data["followers"]))
+    except Exception as exc:  # noqa: BLE001
+        out["errors"].append(f"Threads: {exc}")
     for pid, m in by_id.items():
         if m:
             m["at"] = now_iso()
