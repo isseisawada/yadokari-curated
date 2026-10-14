@@ -392,13 +392,21 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
                     "SELECT * FROM sns_posts WHERE slot_at <= ? OR state IN ('posted', 'failed')"
                     " ORDER BY slot_at DESC LIMIT 120", (now.isoformat(),)).fetchall()
             else:
+                # 承認待ち（next）と予約済み（queued）は分ける（2026-10-14 ユーザー指定）
+                states = ("approved", "queued") if view == "queued" else ("draft", "redo")
                 rows = conn.execute(
-                    "SELECT * FROM sns_posts WHERE slot_at > ? AND state NOT IN ('posted', 'failed')"
-                    " ORDER BY slot_at", (now.isoformat(),)).fetchall()
-        n_draft = sum(1 for r in rows if r["state"] == "draft" and view != "done")
+                    "SELECT * FROM sns_posts WHERE slot_at > ? AND state IN (?, ?) ORDER BY slot_at",
+                    (now.isoformat(), *states)).fetchall()
+            counts = {r["state"]: r["n"] for r in conn.execute(
+                "SELECT state, COUNT(*) AS n FROM sns_posts WHERE slot_at > ? GROUP BY state",
+                (now.isoformat(),)).fetchall()}
+        n_draft = sum(1 for r in rows if r["state"] == "draft" and view == "next")
+        n_pending = counts.get("draft", 0) + counts.get("redo", 0)
+        n_queued = counts.get("approved", 0) + counts.get("queued", 0)
         labels = {"draft": "承認待ち", "approved": "承認済み", "queued": "予約済み", "posted": "投稿済み",
                   "failed": "失敗", "skipped": "外した", "redo": "作り直し中"}
         return render(request, "sns.html", rows=rows, view=view, n_draft=n_draft, state_labels=labels,
+                      n_pending=n_pending, n_queued=n_queued,
                       patterns={k: v.split("（")[0] for k, v in PATTERNS.items()}, budget=TEXT_BUDGET,
                       new_times=config.sns.new_times, archive_times=config.sns.archive_times,
                       approval_until=config.sns.approval_until, lookahead=config.sns.lookahead_days)

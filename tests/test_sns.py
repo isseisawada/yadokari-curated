@@ -179,6 +179,9 @@ def test_review_page_edit_approve_and_skip(config, db, tmp_path):
     assert r.status_code == 303
     row = db.execute("SELECT text, state FROM sns_posts WHERE id = ?", (ids[0],)).fetchone()
     assert (row["text"], row["state"]) == ("書き直した文面。", "approved")
+    # 承認したものは「予約済み」のタブへ移る
+    assert "書き直した文面。" not in client.get("/sns").text
+    assert "書き直した文面。" in client.get("/sns?view=queued").text
     too_long = "あ" * 200
     assert "err=" in client.post(f"/sns/{ids[1]}", data={"text": too_long}, follow_redirects=False).headers["location"]
     client.post(f"/sns/{ids[1]}/skip")
@@ -332,3 +335,17 @@ def test_skip_reason_is_shown_to_the_ai_and_redo_note_rewrites_same_article(conf
     # 指示なしの作り直しは、従来どおり消して別案
     client.post(f"/sns/{ids[1]}/redo", data={"note": ""})
     assert db.execute("SELECT 1 FROM sns_posts WHERE id = ?", (ids[1],)).fetchone() is None
+
+
+def test_push_cancels_wp_queue_for_posts_sent_back_to_draft(config, db):
+    cfg = sns_config(config, until="2026-10-01")
+    wp = FakeSnsWP()
+    official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(2)]), now=NOW, limit=1)
+    official.push(cfg, db, wp, now=NOW)
+    pid = db.execute("SELECT id FROM sns_posts").fetchone()["id"]
+    assert pid in wp.queue
+    db.execute("UPDATE sns_posts SET state = 'draft', approved_at = NULL WHERE id = ?", (pid,))
+    db.commit()
+    official.push(cfg, db, wp, now=NOW)
+    assert pid not in wp.queue
+    assert db.execute("SELECT queued_at FROM sns_posts WHERE id = ?", (pid,)).fetchone()["queued_at"] is None

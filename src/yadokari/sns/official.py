@@ -454,11 +454,21 @@ def tagged(config: Config, link: str, kind: str) -> str:
 def push(config: Config, conn: DbConnection, wp, now: datetime | None = None) -> tuple[int, list[str]]:
     """承認済みでまだ渡していないものを WP に渡す。(渡した本数, エラー)。"""
     now = now or datetime.now(UTC)
+    errors: list[str] = []
+    # 承認待ちに戻したのに WP に予約が残っているもの（queued_at が残っている）は取り消す
+    for r in conn.execute("SELECT id FROM sns_posts WHERE state IN ('draft', 'redo') AND queued_at IS NOT NULL"
+                          " AND slot_at > ?", (now.isoformat(),)).fetchall():
+        try:
+            wp.sns_upsert({"key": r["id"], "cancel": True})
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"#{r['id']}: 取り消し {exc}")
+            continue
+        conn.execute("UPDATE sns_posts SET queued_at = NULL WHERE id = ?", (r["id"],))
+        conn.commit()
     rows = conn.execute(
         "SELECT * FROM sns_posts WHERE state = 'approved' AND slot_at > ? ORDER BY slot_at",
         ((now + timedelta(minutes=5)).isoformat(),),
     ).fetchall()
-    errors: list[str] = []
     n = 0
     for r in rows:
         try:
