@@ -156,12 +156,16 @@ def open_slots(config: Config, conn: DbConnection, now: datetime) -> list[tuple[
     taken = {r["slot_at"] for r in conn.execute(
         "SELECT slot_at FROM sns_posts WHERE slot_at > ?", (now.isoformat(),)).fetchall()}
     out = []
-    for offset in range(config.sns.lookahead_days + 1):
+    s = config.sns
+    archive_days = s.archive_lookahead_days if s.archive_lookahead_days is not None else s.lookahead_days
+    for offset in range(max(s.lookahead_days, archive_days) + 1):
         for slot, kind in slots_for(config, today + timedelta(days=offset)):
             if slot <= now + timedelta(minutes=30) or slot.isoformat() in taken:
                 continue
+            if offset > (s.lookahead_days if kind == "new" else archive_days):
+                continue
             out.append((slot, kind))
-    return out
+    return sorted(out)
 
 
 # ----------------------------------------------------------------------
@@ -331,9 +335,9 @@ def write(config: Config, src: Source, client, *, hint: str = "", recent: list[s
             "warnings": problems}
 
 
-def needs_approval(config: Config, slot: datetime) -> bool:
+def needs_approval(config: Config, slot: datetime, kind: str = "archive") -> bool:
     until = config.sns.approval_until
-    if not until:
+    if not until or kind not in config.sns.approval_kinds:
         return False
     return slot.astimezone(ZoneInfo(config.app.timezone)).date() <= date.fromisoformat(until)
 
@@ -382,7 +386,7 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
             res.failed.append((slot.isoformat(), str(exc)))
             log.warning("SNS の文面に失敗しました: %s %s", slot, exc)
             continue
-        state = "draft" if (out["warnings"] or needs_approval(config, slot)) else "approved"
+        state = "draft" if (out["warnings"] or needs_approval(config, slot, kind)) else "approved"
         conn.execute(
             "INSERT INTO sns_posts (kind, slot_at, wp_post_id, link, title, text, ai_text, image, pattern, warnings,"
             " model, state, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -430,7 +434,7 @@ def rewrite_requested(config: Config, conn: DbConnection, wp, client, now: datet
             conn.rollback()
             res.failed.append((row["slot_at"], str(exc)))
             continue
-        state = "draft" if (out["warnings"] or needs_approval(config, slot)) else "approved"
+        state = "draft" if (out["warnings"] or needs_approval(config, slot, row["kind"])) else "approved"
         conn.execute(
             "UPDATE sns_posts SET text = ?, ai_text = ?, pattern = ?, warnings = ?, model = ?, state = ?,"
             " created_at = ?, approved_at = ? WHERE id = ?",

@@ -60,6 +60,8 @@ def sns_config(config, until="2026-10-14"):
     config.sns.enabled = True
     config.sns.approval_until = until
     config.sns.lookahead_days = 1
+    config.sns.archive_lookahead_days = None
+    config.sns.approval_kinds = ["new", "archive"]
     return config
 
 
@@ -349,3 +351,22 @@ def test_push_cancels_wp_queue_for_posts_sent_back_to_draft(config, db):
     official.push(cfg, db, wp, now=NOW)
     assert pid not in wp.queue
     assert db.execute("SELECT queued_at FROM sns_posts WHERE id = ?", (pid,)).fetchone()["queued_at"] is None
+
+
+def test_only_archive_needs_approval_and_archive_is_planned_further_ahead(config, db):
+    """キュレーション（新着）は承認なし、インタビュー（過去記事）は先までまとめて承認待ちに（2026-10-14 ユーザー指定）。"""
+    cfg = sns_config(config, until="2026-12-31")
+    cfg.sns.archive_times = ["20:15"]
+    cfg.sns.approval_kinds = ["archive"]
+    cfg.sns.archive_lookahead_days = 5
+    add_scheduled_draft(db, datetime(2026, 10, 13, 7, 0, tzinfo=UTC))
+    official.plan(cfg, db, wp=FakeSnsWP(), client=FakeLLM(*[good() for _ in range(30)]), now=NOW, limit=30,
+                  rng=random.Random(1))
+    rows = db.execute("SELECT kind, state, slot_at FROM sns_posts ORDER BY slot_at").fetchall()
+    new = [r for r in rows if r["kind"] == "new"]
+    assert new and {r["state"] for r in new} == {"approved"}
+    archive = [r for r in rows if r["kind"] == "archive"]
+    assert {r["state"] for r in archive} == {"draft"}
+    # 過去記事は5日先まで（今日〜10/18 の20:15 = 6本）。新着の枠は lookahead_days（1日）まで
+    assert sum(1 for r in archive if r["slot_at"].endswith("11:15:00+00:00")) == 6
+    assert max(r["slot_at"] for r in rows if not r["slot_at"].endswith("11:15:00+00:00")) < "2026-10-15"
