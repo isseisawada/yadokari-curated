@@ -5,7 +5,8 @@
   <div class="snsub-row">
     <h1>SNS</h1>
     <div class="tabs">
-      <a href="/sns" class="{{ 'on' if view == 'next' }}">これから</a>
+      <a href="/sns" class="{{ 'on' if view == 'next' }}">承認待ち {{ n_pending }}</a>
+      <a href="/sns?view=queued" class="{{ 'on' if view == 'queued' }}">予約済み {{ n_queued }}</a>
       <a href="/sns?view=done" class="{{ 'on' if view == 'done' }}">出したもの</a>
     </div>
   </div>
@@ -122,7 +123,7 @@
     {% endif %}
   </article>
 {% else %}
-  <p class="muted">まだありません。毎時、{{ lookahead }}日先までの文面を自動で作ります。</p>
+  <p class="muted">{% if view == 'next' %}承認待ちはありません。{% elif view == 'queued' %}予約はありません。{% else %}まだありません。{% endif %}毎時、{{ lookahead }}日先までの文面を自動で作ります。</p>
 {% endfor %}
 {% if view == 'next' and n_draft %}
 <div class="bulk"><form method="post" action="/sns/approve-all" onsubmit="return confirm('承認待ちをすべて承認します。よろしいですか？')">
