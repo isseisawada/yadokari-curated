@@ -393,3 +393,18 @@ def test_retry_missing_asks_wp_only_for_posts_missing_one_side(config, db):
     assert official.retry_missing(db, wp, NOW - timedelta(days=1)) == [ids[0]]
     assert wp.queue[ids[0]]["retry"] is True
     assert db.execute("SELECT state FROM sns_posts WHERE id = ?", (ids[0],)).fetchone()["state"] == "queued"
+
+
+def test_retry_missing_compares_since_in_utc(config, db):
+    """JST の「今日0時」を渡しても、UTC で前日の枠（JST 08:15）を拾う。"""
+    from zoneinfo import ZoneInfo
+
+    cfg = sns_config(config, until="2026-10-01")
+    wp = FakeSnsWP()
+    official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(1)]), now=NOW, limit=1)
+    pid = db.execute("SELECT id FROM sns_posts").fetchone()["id"]
+    db.execute("UPDATE sns_posts SET state = 'posted', x_id = 'x1', slot_at = ? WHERE id = ?",
+               (datetime(2026, 10, 13, 23, 15, tzinfo=UTC).isoformat(), pid))
+    db.commit()
+    since = datetime(2026, 10, 14, 0, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+    assert official.retry_missing(db, wp, since) == [pid]
