@@ -529,7 +529,7 @@ def retry_missing(conn: DbConnection, wp, since: datetime, gap_min: int = 3) -> 
     since 以降の枠で、片方の ID が無いものを gap_min 分おきに WP に頼む。2026-10-14 ユーザー指定（今日の分を Threads にも）。"""
     rows = conn.execute(
         "SELECT id FROM sns_posts WHERE state = 'posted' AND slot_at >= ? AND (threads_id IS NULL OR x_id IS NULL)"
-        " ORDER BY slot_at", (since.isoformat(),)).fetchall()
+        " ORDER BY slot_at", (since.astimezone(UTC).isoformat(),)).fetchall()  # slot_at は UTC の文字列
     now = datetime.now(UTC)
     done = []
     for i, r in enumerate(rows):
