@@ -380,3 +380,16 @@ def test_archive_runs_out_quietly_and_reads_every_page(config, db):
     wp.archive = wp.archive[:2]
     res = official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(10)]), now=NOW, limit=10)
     assert len(res.created) == 2 and not res.failed and len(res.empty) == 5
+
+
+def test_retry_missing_asks_wp_only_for_posts_missing_one_side(config, db):
+    cfg = sns_config(config, until="2026-10-01")
+    wp = FakeSnsWP()
+    official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(2)]), now=NOW, limit=2)
+    ids = [r["id"] for r in db.execute("SELECT id FROM sns_posts ORDER BY slot_at").fetchall()]
+    db.execute("UPDATE sns_posts SET state = 'posted', x_id = 'x1' WHERE id = ?", (ids[0],))
+    db.execute("UPDATE sns_posts SET state = 'posted', x_id = 'x2', threads_id = 't2' WHERE id = ?", (ids[1],))
+    db.commit()
+    assert official.retry_missing(db, wp, NOW - timedelta(days=1)) == [ids[0]]
+    assert wp.queue[ids[0]]["retry"] is True
+    assert db.execute("SELECT state FROM sns_posts WHERE id = ?", (ids[0],)).fetchone()["state"] == "queued"

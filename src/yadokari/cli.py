@@ -288,6 +288,16 @@ def _cmd_sns(cfg, args) -> int:
                 return 1
             print(f"Threads: つながりました（フォロワー {data['followers']}）")
             return 0
+        if args.action == "retry":
+            # 今日（JST）の枠で、出せなかった方だけ出し直す
+            from datetime import datetime as _dt
+            from zoneinfo import ZoneInfo
+
+            tz = ZoneInfo(cfg.app.timezone)
+            since = _dt.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+            ids = official.retry_missing(conn, wp, since)
+            print(f"出し直し {len(ids)} 本: {ids}")
+            return 0
         if args.action == "redo":
             # 承認待ちの文面を消して作り直す（書き方を変えたとき。承認済み・予約済みは触らない）
             n = official.clear_drafts(conn)
@@ -489,7 +499,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=_cmd_x)
 
     p = sub.add_parser("sns", help="公式 SNS（X・Threads）の文面づくり・予約・計測")
-    p.add_argument("action", choices=["run", "plan", "push", "sync", "measure", "report", "redo", "check"])
+    p.add_argument("action", choices=["run", "plan", "push", "sync", "measure", "report", "redo", "check", "retry"])
     p.add_argument("--limit", type=int, default=50, help="1回に作る文面の上限")
     p.set_defaults(func=_cmd_sns)
 

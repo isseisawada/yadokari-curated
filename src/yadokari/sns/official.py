@@ -524,6 +524,22 @@ def cancel(conn: DbConnection, wp, post_id: int, reason: str = "") -> None:
     conn.commit()
 
 
+def retry_missing(conn: DbConnection, wp, since: datetime, gap_min: int = 3) -> list[int]:
+    """出せなかった方だけ出し直す（例: Threads のトークンを入れる前に X だけに出たもの）。
+    since 以降の枠で、片方の ID が無いものを gap_min 分おきに WP に頼む。2026-10-14 ユーザー指定（今日の分を Threads にも）。"""
+    rows = conn.execute(
+        "SELECT id FROM sns_posts WHERE state = 'posted' AND slot_at >= ? AND (threads_id IS NULL OR x_id IS NULL)"
+        " ORDER BY slot_at", (since.isoformat(),)).fetchall()
+    now = datetime.now(UTC)
+    done = []
+    for i, r in enumerate(rows):
+        wp.sns_upsert({"key": r["id"], "retry": True, "at": (now + timedelta(minutes=gap_min * i)).isoformat()})
+        conn.execute("UPDATE sns_posts SET state = 'queued', error = NULL WHERE id = ?", (r["id"],))
+        conn.commit()
+        done.append(r["id"])
+    return done
+
+
 def sync(conn: DbConnection, wp) -> int:
     """WP 側の結果（投稿 ID・エラー）を読む。"""
     rows = conn.execute("SELECT id FROM sns_posts WHERE state = 'queued'").fetchall()

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: YADOKARI CURATED SNS
  * Description: 公式 SNS（X・Threads @yadokari_mobi）へ、決めた時刻に投稿する。文面は yadokari-curated が作って REST で渡す。
- * Version: 1.1
+ * Version: 1.2
  *
  * 置き場所: wp-content/mu-plugins/yadokari-curated-sns.php（有効化の操作は要らない）
  * 前提: yadokari-curated-x.php（X の投稿関数 yc_x_post と鍵 YC_X_*）が同じ mu-plugins にあること
@@ -14,6 +14,7 @@
  * 動き（2026-10-13 ユーザー指定）:
  * - POST /wp-json/yc/v1/sns  {key, kind, text, url, at, wp_post_id}  予約を入れる（key が同じなら上書き）
  *                            {key, cancel: true}                      取り消す
+ *                            {key, retry: true, at?}                  出せなかった方だけ出し直す（出せた方は出さない）
  * - GET  /wp-json/yc/v1/sns?keys=1,2,3                               結果（投稿 ID・エラー）
  * - GET  /wp-json/yc/v1/sns/metrics?threads=ID,ID                    Threads の数字とフォロワー数
  * - 時刻になったら X に「本文＋改行2つ＋URL」、Threads に「本文」＋リンクのカード（link_attachment）を投稿
@@ -86,6 +87,22 @@ add_action('rest_api_init', function () {
                     }
                 }
                 return array('id' => $id, 'state' => 'cancelled');
+            }
+            if ($req['retry']) {
+                // 出せなかった方（例: トークンが無くて Threads に出なかった）だけ出し直す。X の ID があれば X は出さない
+                if (!$id) {
+                    return new WP_Error('yc_sns', 'その予約がありません', array('status' => 404));
+                }
+                if (get_post_meta($id, 'yc_sns_x_id', true) && get_post_meta($id, 'yc_sns_th_id', true)) {
+                    return array('id' => $id, 'state' => 'posted');
+                }
+                $at = $req['at'] ? strtotime((string) $req['at']) : time();
+                update_post_meta($id, 'yc_sns_state', 'queued');
+                delete_post_meta($id, 'yc_sns_error');
+                delete_post_meta($id, 'yc_sns_wait');
+                wp_clear_scheduled_hook('yc_sns_fire', array($id));
+                wp_schedule_single_event(max($at, time()), 'yc_sns_fire', array($id));
+                return array('id' => $id, 'state' => 'queued', 'at' => gmdate('c', max($at, time())));
             }
             $at = strtotime((string) $req['at']);
             $text = sanitize_textarea_field((string) $req['text']);
