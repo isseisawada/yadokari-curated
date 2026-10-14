@@ -119,6 +119,8 @@ class Source:
 class PlanResult:
     created: list[tuple[str, str, int]] = field(default_factory=list)  # (slot, kind, wp_post_id)
     failed: list[tuple[str, str]] = field(default_factory=list)
+    # 使える過去記事が尽きて作れなかった枠（失敗ではない。条件を広げるまで空く）
+    empty: list[str] = field(default_factory=list)
 
 
 def now_iso() -> str:
@@ -198,7 +200,7 @@ def excluded_title(config: Config, title: str) -> bool:
 
 
 def archive_article(config: Config, wp, used: set[int], now: datetime,
-                    rng: random.Random | None = None, tries: int = 4,
+                    rng: random.Random | None = None, max_pages: int = 10,
                     skip: set[int] | None = None) -> Source | None:
     """yadokari.net の過去記事から1本。
 
@@ -219,8 +221,11 @@ def archive_article(config: Config, wp, used: set[int], now: datetime,
         params = {**base, **pool}
         _, total = wp.list_posts({**params, "per_page": 1, "page": 1})
         pages = max(1, (total + 19) // 20)  # per_page=1 のページ数 = 件数
-        for _ in range(min(tries, pages * 2)):
-            data, _ = wp.list_posts({**params, "page": rng.randint(1, pages)})
+        # ページを無作為な順に全部見る（候補が少ないので、当てずっぽうに数ページだと見落とす）。大きい山は max_pages まで
+        order = list(range(1, pages + 1))
+        rng.shuffle(order)
+        for page in order[:max_pages]:
+            data, _ = wp.list_posts({**params, "page": page})
             rng.shuffle(data)
             for p in data:
                 pid = int(p["id"])
@@ -354,11 +359,16 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
     fixes = edits(conn)
     avoid = skip_reasons(conn)
     limit -= rewrite_requested(config, conn, wp, client, now, hint=hint, fixes=fixes, res=res, limit=limit)
+    rejected: set[int] = set()  # この実行で AI が使えないとした過去記事（次の枠でも選ばない）
+    exhausted = False
     for slot, kind in open_slots(config, conn, now)[:max(limit, 0)]:
         try:
             src = new_article_for(config, conn, slot) if kind == "new" else None
             if src is not None and src.wp_post_id in used:
                 src = None  # 新着を人が外した枠は、過去記事で埋める
+            if src is None and exhausted:
+                res.empty.append(slot.isoformat())
+                continue
             recent = [r["text"] for r in conn.execute(
                 "SELECT text FROM sns_posts ORDER BY slot_at DESC LIMIT 6").fetchall()]
             out = None
@@ -367,7 +377,6 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
             else:
                 # 過去記事は、AI が「今読んでも成り立たない」と言ったら別の記事にする（3本まで）
                 kind = "archive"
-                rejected: set[int] = set()
                 for _ in range(3):
                     src = archive_article(config, wp, used, now, rng=rng, skip=rejected)
                     if src is None:
@@ -379,7 +388,8 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
                     rejected.add(src.wp_post_id)
                     out = None
             if src is None or out is None:
-                res.failed.append((slot.isoformat(), "使える過去記事が見つかりません"))
+                exhausted = src is None
+                res.empty.append(slot.isoformat())
                 continue
         except Exception as exc:  # noqa: BLE001 - 1枠の失敗で残りを止めない
             conn.rollback()
