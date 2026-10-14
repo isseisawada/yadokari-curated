@@ -292,6 +292,8 @@ def _cmd_sns(cfg, args) -> int:
                 print(f"  {slot} {kind} wp#{pid}")
             for slot, err in res.failed:
                 print(f"  失敗: {slot} {err}")
+            if res.empty:
+                print(f"使える過去記事が足りず空いた枠 {len(res.empty)} 件（{res.empty[0]} から）")
             failed |= bool(res.failed)
         if args.action in ("run", "push"):
             n, errors = official.push(cfg, conn, wp)

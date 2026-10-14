@@ -168,7 +168,7 @@ def test_measure_and_hints(config, db):
 
 
 def test_review_page_edit_approve_and_skip(config, db, tmp_path):
-    cfg = sns_config(config)
+    cfg = sns_config(config, until="2099-12-31")  # 実時刻で動かすので、承認の期限は先にしておく
     cfg.app.db_path = str(tmp_path / "t.db")
     wp = FakeSnsWP()
     official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(3)]),
@@ -315,7 +315,7 @@ def test_skipped_slot_is_refilled_with_another_article(config, db):
 
 def test_skip_reason_is_shown_to_the_ai_and_redo_note_rewrites_same_article(config, db, tmp_path):
     """外す理由は次の過去記事選びに、作り直しの指示はその1本の書き直しに使う（2026-10-14 ユーザー指定）。"""
-    cfg = sns_config(config)
+    cfg = sns_config(config, until="2099-12-31")
     cfg.app.db_path = str(tmp_path / "t.db")
     wp = FakeSnsWP()
     official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(2)]), now=datetime.now(UTC), limit=2)
@@ -370,3 +370,13 @@ def test_only_archive_needs_approval_and_archive_is_planned_further_ahead(config
     # 過去記事は5日先まで（今日〜10/18 の20:15 = 6本）。新着の枠は lookahead_days（1日）まで
     assert sum(1 for r in archive if r["slot_at"].endswith("11:15:00+00:00")) == 6
     assert max(r["slot_at"] for r in rows if not r["slot_at"].endswith("11:15:00+00:00")) < "2026-10-15"
+
+
+def test_archive_runs_out_quietly_and_reads_every_page(config, db):
+    """候補を全ページから探す。尽きたら失敗にせず空けておく。"""
+    cfg = sns_config(config, until="2099-12-31")
+    cfg.sns.archive_pools = []
+    wp = FakeSnsWP()
+    wp.archive = wp.archive[:2]
+    res = official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(10)]), now=NOW, limit=10)
+    assert len(res.created) == 2 and not res.failed and len(res.empty) == 5
