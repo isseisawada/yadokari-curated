@@ -16,7 +16,7 @@
     python -m yadokari.cli wp resend
     python -m yadokari.cli auto [--limit 10]
     python -m yadokari.cli x post DRAFT_ID [--dry-run]
-    python -m yadokari.cli sns run|plan|push|sync|measure|report [--limit 8]
+    python -m yadokari.cli sns run|plan|push|sync|measure|report [--limit 50]
     python -m yadokari.cli learn
     python -m yadokari.cli monitor
     python -m yadokari.cli report
@@ -480,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("sns", help="公式 SNS（X・Threads）の文面づくり・予約・計測")
     p.add_argument("action", choices=["run", "plan", "push", "sync", "measure", "report", "redo"])
-    p.add_argument("--limit", type=int, default=8, help="1回に作る文面の上限")
+    p.add_argument("--limit", type=int, default=50, help="1回に作る文面の上限")
     p.set_defaults(func=_cmd_sns)
 
     p = sub.add_parser("learn", help="非承認理由からルール候補を育てる")
