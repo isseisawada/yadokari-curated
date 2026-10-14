@@ -297,6 +297,10 @@ class SnsConfig(BaseModel):
     lookahead_days: int = 3
     # この日（JST）より前の枠は、人が承認したものだけ出す。null なら承認なしで出す
     approval_until: str | None = None
+    # 承認が要る種類（new=新着キュレーション・archive=過去記事）。2026-10-14: 新着は承認なしで出す
+    approval_kinds: list[str] = ["new", "archive"]
+    # 過去記事は何日先まで文面を作っておくか（承認待ちにまとめて並べる）。null なら lookahead_days
+    archive_lookahead_days: int | None = None
     model: str = "claude-opus-5-5"
     effort: str | None = "low"
     fallbacks: bool = True
