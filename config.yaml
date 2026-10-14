@@ -173,7 +173,8 @@ sns:
   model: claude-sonnet-5-5
   effort: low
   fallbacks: true
-  lookahead_days: 3
+  # 2026-10-14 ユーザー指定: 3本ずつでは効率が悪い。2週間先までまとめて作る
+  lookahead_days: 14
   archive_min_age_days: 60
   repeat_after_days: 365
   # 過去記事に使わない: セミナー・展示会（2367）・プレスリリース（2443）・ニュース（2419）

@@ -26,6 +26,8 @@ class FakeSnsWP:
         self.queue: dict[int, dict] = {}
 
     def list_posts(self, params):
+        if "include" in params:
+            return [p for p in self.archive if str(p["id"]) == params["include"]], 1
         if params.get("per_page") == 1:
             return self.archive[:1], len(self.archive)
         return list(self.archive), 1
@@ -304,3 +306,29 @@ def test_skipped_slot_is_refilled_with_another_article(config, db):
     assert again[new["slot_at"]]["kind"] == "archive"
     assert again[new["slot_at"]]["wp_post_id"] not in (900, archive["wp_post_id"])
     assert {again[archive["slot_at"]]["state"], again[new["slot_at"]]["state"]} == {"draft"}
+
+
+def test_skip_reason_is_shown_to_the_ai_and_redo_note_rewrites_same_article(config, db, tmp_path):
+    """外す理由は次の過去記事選びに、作り直しの指示はその1本の書き直しに使う（2026-10-14 ユーザー指定）。"""
+    cfg = sns_config(config)
+    cfg.app.db_path = str(tmp_path / "t.db")
+    wp = FakeSnsWP()
+    official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(2)]), now=datetime.now(UTC), limit=2)
+    ids = [r["id"] for r in db.execute("SELECT id FROM sns_posts ORDER BY slot_at").fetchall()]
+    client = TestClient(create_app(cfg, wp_factory=lambda: wp))
+    client.post(f"/sns/{ids[0]}/skip", data={"reason": "この人は離婚したので出さない"})
+    assert db.execute("SELECT reason FROM sns_skipped").fetchone()["reason"] == "この人は離婚したので出さない"
+    before = db.execute("SELECT * FROM sns_posts WHERE id = ?", (ids[1],)).fetchone()
+    client.post(f"/sns/{ids[1]}/redo", data={"note": "もっと短く"})
+    assert db.execute("SELECT state FROM sns_posts WHERE id = ?", (ids[1],)).fetchone()["state"] == "redo"
+    llm = FakeLLM(*[good("短くした。") for _ in range(2)])
+    res = official.plan(cfg, db, wp=wp, client=llm, now=datetime.now(UTC), limit=2)
+    after = db.execute("SELECT * FROM sns_posts WHERE id = ?", (ids[1],)).fetchone()
+    assert (after["state"], after["text"], after["wp_post_id"]) == ("draft", "短くした。", before["wp_post_id"])
+    prompts = [json.dumps(c, ensure_ascii=False) for c in llm.calls]
+    assert any("もっと短く" in p for p in prompts)
+    assert any("離婚したので出さない" in p for p in prompts)  # 空いた枠の記事選び
+    assert len(res.created) == 2
+    # 指示なしの作り直しは、従来どおり消して別案
+    client.post(f"/sns/{ids[1]}/redo", data={"note": ""})
+    assert db.execute("SELECT 1 FROM sns_posts WHERE id = ?", (ids[1],)).fetchone() is None

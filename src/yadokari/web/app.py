@@ -397,7 +397,7 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
                     " ORDER BY slot_at", (now.isoformat(),)).fetchall()
         n_draft = sum(1 for r in rows if r["state"] == "draft" and view != "done")
         labels = {"draft": "承認待ち", "approved": "承認済み", "queued": "予約済み", "posted": "投稿済み",
-                  "failed": "失敗", "skipped": "外した"}
+                  "failed": "失敗", "skipped": "外した", "redo": "作り直し中"}
         return render(request, "sns.html", rows=rows, view=view, n_draft=n_draft, state_labels=labels,
                       patterns={k: v.split("（")[0] for k, v in PATTERNS.items()}, budget=TEXT_BUDGET,
                       new_times=config.sns.new_times, archive_times=config.sns.archive_times,
@@ -437,13 +437,13 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
         return back(f"/sns#p{post_id}", msg="承認しました" if do == "approve" else "保存しました")
 
     @app.post("/sns/{post_id}/skip")
-    def sns_skip(post_id: int):
+    def sns_skip(post_id: int, reason: str = Form("")):
         from yadokari.sns.official import cancel
 
         wp = sns_wp()
         with db() as conn:
             try:
-                cancel(conn, wp, post_id)
+                cancel(conn, wp, post_id, reason=reason)
             except Exception as exc:  # noqa: BLE001 - 画面に出す
                 return back("/sns", err=f"WordPress の予約を取り消せませんでした: {exc}")
             finally:
@@ -451,8 +451,10 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
         return back("/sns", msg="外しました。次の毎時の実行で別の記事を作って、確認に回します")
 
     @app.post("/sns/{post_id}/redo")
-    def sns_redo(post_id: int):
-        """消して、次の毎時の実行で作り直させる（同じ枠・別の文面。過去記事なら別の記事になることもある）。"""
+    def sns_redo(post_id: int, note: str = Form("")):
+        """作り直す。指示があれば同じ記事のまま指示どおりに書き直す（state=redo）。
+        指示が無ければ消して、次の毎時の実行で作り直させる（過去記事なら別の記事になることもある）。"""
+        note = note.strip()
         with db() as conn:
             row = conn.execute("SELECT state FROM sns_posts WHERE id = ?", (post_id,)).fetchone()
             if row is None or row["state"] not in ("draft", "approved", "queued"):
@@ -465,6 +467,11 @@ def create_app(config: Config, auth: BasicAuth | None = None, *, drafter=None, w
                     return back("/sns", err=f"WordPress の予約を取り消せませんでした: {exc}")
                 finally:
                     wp.close()
+            if note:
+                conn.execute("UPDATE sns_posts SET state = 'redo', note = ?, queued_at = NULL WHERE id = ?",
+                             (note, post_id))
+                conn.commit()
+                return back(f"/sns#p{post_id}", msg="次の毎時の実行で、指示どおりに書き直します")
             conn.execute("DELETE FROM sns_posts WHERE id = ?", (post_id,))
             conn.commit()
         return back("/sns", msg="消しました。次の毎時の実行で作り直します")

@@ -105,6 +105,7 @@
     </form>
     {% for w in (p['warnings']|fromjson or []) %}<div class="warn">{{ w }}</div>{% endfor %}
     {% if p['error'] %}<div class="warn">{{ p['error'] }}</div>{% endif %}
+    {% if p['state'] == 'redo' %}<div class="warn">作り直しの指示: {{ p['note'] }}（次の毎時の実行で書き直します）</div>{% endif %}
     {% set m = p['metrics']|fromjson %}
     {% if m %}
     <div class="nums">
@@ -115,8 +116,8 @@
     {% if editable %}
     <div class="sp-acts">
       <div class="go"><button class="approve" form="f{{ p['id'] }}" name="do" value="approve">承認</button></div>
-      <form class="sub2" method="post" action="/sns/{{ p['id'] }}/redo"><button>作り直す</button></form>
-      <form class="sub2" method="post" action="/sns/{{ p['id'] }}/skip" onsubmit="return confirm('この記事は外して、別の記事を作り直します。よろしいですか？')"><button>外す</button></form>
+      <form class="sub2" method="post" action="/sns/{{ p['id'] }}/redo" data-ask="どう作り直しますか？（例: もっと短く・○○に触れて）&#10;空のままなら、別の案で作り直します" data-field="note"><input type="hidden" name="note"><button>作り直す</button></form>
+      <form class="sub2" method="post" action="/sns/{{ p['id'] }}/skip" data-ask="外す理由を書いてください（次から似た記事を選ばないのに使います）" data-field="reason"><input type="hidden" name="reason"><button>外す</button></form>
     </div>
     {% endif %}
   </article>
@@ -130,6 +131,16 @@
 <script>document.body.classList.add('has-bulk');</script>
 {% endif %}
 <div class="toast2" role="status" aria-live="polite"></div>
+<script>
+// 作り直す・外すは、指示・理由を聞いてから送る（2026-10-14 ユーザー指定）。キャンセルなら送らない
+document.querySelectorAll('form[data-ask]').forEach(function (f) {
+  f.addEventListener('submit', function (e) {
+    var v = window.prompt(f.dataset.ask, '');
+    if (v === null) { e.preventDefault(); return; }
+    f.querySelector('[name="' + f.dataset.field + '"]').value = v;
+  });
+});
+</script>
 <script>
 (function () {
   // X の文字数（日本語は2、URL は23）。上限280 から URL と改行の分を引いた {{ budget }} まで

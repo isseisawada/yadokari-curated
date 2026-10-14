@@ -269,8 +269,17 @@ def edits(conn: DbConnection, limit: int = 5) -> list[tuple[str, str]]:
     return [(r["ai_text"], r["text"]) for r in rows]
 
 
+def skip_reasons(conn: DbConnection, limit: int = 15) -> list[tuple[str, str]]:
+    """人が外した記事と理由（新しい順）。過去記事を選ぶときに AI に見せる。"""
+    rows = conn.execute(
+        "SELECT title, reason FROM sns_skipped WHERE reason IS NOT NULL AND reason <> '' ORDER BY id DESC LIMIT ?",
+        (limit,)).fetchall()
+    return [(r["title"] or "", r["reason"]) for r in rows]
+
+
 def write(config: Config, src: Source, client, *, hint: str = "", recent: list[str] | None = None,
-          fixes: list[tuple[str, str]] | None = None) -> dict:
+          fixes: list[tuple[str, str]] | None = None, note: str = "",
+          avoid: list[tuple[str, str]] | None = None) -> dict:
     """文面を書かせて検算する。{"text","pattern","warnings"}。"""
     from yadokari.llm import call_json, make_client
 
@@ -287,6 +296,12 @@ def write(config: Config, src: Source, client, *, hint: str = "", recent: list[s
         # 人が直した例から、編集部の声に寄せる（2026-10-14 ユーザー指定）
         user += "\n\n編集部が AI の案をこう直した（この直し方の方向に寄せる）:\n" + "\n".join(
             f"--- AI の案\n{a}\n--- 直した文\n{b}" for a, b in fixes)
+    if avoid:
+        # 人が外した理由（2026-10-14 ユーザー指定）。同じ理由に当たる記事なら usable=false
+        user += "\n\n編集部が外した過去記事と理由（同じ理由に当たる記事なら usable を false に）:\n" + "\n".join(
+            f"- {t}（理由: {r}）" for t, r in avoid)
+    if note:
+        user += f"\n\n編集部からこの投稿への指示（必ず従う）: {note}"
     messages = [{"role": "user", "content": user}]
     data: dict = {}
     problems: list[str] = []
@@ -333,7 +348,9 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
     used = used_recently(config, conn, now)
     hint = hints(conn, now)
     fixes = edits(conn)
-    for slot, kind in open_slots(config, conn, now)[:limit]:
+    avoid = skip_reasons(conn)
+    limit -= rewrite_requested(config, conn, wp, client, now, hint=hint, fixes=fixes, res=res, limit=limit)
+    for slot, kind in open_slots(config, conn, now)[:max(limit, 0)]:
         try:
             src = new_article_for(config, conn, slot) if kind == "new" else None
             if src is not None and src.wp_post_id in used:
@@ -351,7 +368,7 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
                     src = archive_article(config, wp, used, now, rng=rng, skip=rejected)
                     if src is None:
                         break
-                    out = write(config, src, client, hint=hint, recent=recent, fixes=fixes)
+                    out = write(config, src, client, hint=hint, recent=recent, fixes=fixes, avoid=avoid)
                     if out["usable"]:
                         break
                     log.info("過去記事を外しました: wp#%s %s", src.wp_post_id, out["reason"])
@@ -378,6 +395,50 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
         used.add(src.wp_post_id)
         res.created.append((slot.isoformat(), kind, src.wp_post_id))
     return res
+
+
+def source_of(config: Config, conn: DbConnection, wp, row) -> Source | None:
+    """もう枠に入っている記事を、書き直し用に読み直す。"""
+    if row["kind"] == "new":
+        src = new_article_for(config, conn, datetime.fromisoformat(row["slot_at"]))
+        if src is not None:
+            return src
+    data, _ = wp.list_posts({"include": str(row["wp_post_id"]), "per_page": 1,
+                             "_fields": "id,link,title,content,featured_media"})
+    if not data:
+        return None
+    p = data[0]
+    return Source(wp_post_id=int(p["id"]), link=row["link"],
+                  title=html.unescape(p.get("title", {}).get("rendered", "")) or row["title"],
+                  text=plain_text(p.get("content", {}).get("rendered", "")), image=row["image"])
+
+
+def rewrite_requested(config: Config, conn: DbConnection, wp, client, now: datetime, *, hint: str,
+                      fixes: list[tuple[str, str]], res: PlanResult, limit: int) -> int:
+    """審査画面で「こう作り直して」と指示されたもの（state=redo）を、同じ記事のまま書き直す。書いた本数を返す。"""
+    rows = conn.execute("SELECT * FROM sns_posts WHERE state = 'redo' AND slot_at > ? ORDER BY slot_at LIMIT ?",
+                        (now.isoformat(), limit)).fetchall()
+    for row in rows:
+        slot = datetime.fromisoformat(row["slot_at"])
+        try:
+            src = source_of(config, conn, wp, row)
+            if src is None:
+                raise ValueError("元の記事が読めません")
+            out = write(config, src, client, hint=hint, fixes=fixes, note=row["note"] or "",
+                        recent=[row["text"]])
+        except Exception as exc:  # noqa: BLE001 - 1枠の失敗で残りを止めない
+            conn.rollback()
+            res.failed.append((row["slot_at"], str(exc)))
+            continue
+        state = "draft" if (out["warnings"] or needs_approval(config, slot)) else "approved"
+        conn.execute(
+            "UPDATE sns_posts SET text = ?, ai_text = ?, pattern = ?, warnings = ?, model = ?, state = ?,"
+            " created_at = ?, approved_at = ? WHERE id = ?",
+            (out["text"], out["text"], out["pattern"], json.dumps(out["warnings"], ensure_ascii=False),
+             config.sns.model, state, now_iso(), now_iso() if state == "approved" else None, row["id"]))
+        conn.commit()
+        res.created.append((row["slot_at"], row["kind"], row["wp_post_id"]))
+    return len(rows)
 
 
 # ----------------------------------------------------------------------
@@ -422,7 +483,7 @@ def clear_drafts(conn: DbConnection, now: datetime | None = None) -> int:
     return n
 
 
-def cancel(conn: DbConnection, wp, post_id: int) -> None:
+def cancel(conn: DbConnection, wp, post_id: int, reason: str = "") -> None:
     """外す。WP に渡していれば取り消し、行を消して枠を空ける（次の plan で別の記事が入る）。
 
     2026-10-14 ユーザー指定: 外した本数だけ別の記事を確認に回す。外した記事は sns_skipped に残し、もう出さない。
@@ -432,8 +493,9 @@ def cancel(conn: DbConnection, wp, post_id: int) -> None:
         return
     if row["state"] == "queued":
         wp.sns_upsert({"key": post_id, "cancel": True})
-    conn.execute("INSERT INTO sns_skipped (wp_post_id, slot_at, kind, title, skipped_at) VALUES (?, ?, ?, ?, ?)",
-                 (row["wp_post_id"], row["slot_at"], row["kind"], row["title"], now_iso()))
+    conn.execute("INSERT INTO sns_skipped (wp_post_id, slot_at, kind, title, skipped_at, reason)"
+                 " VALUES (?, ?, ?, ?, ?, ?)",
+                 (row["wp_post_id"], row["slot_at"], row["kind"], row["title"], now_iso(), reason.strip() or None))
     conn.execute("DELETE FROM sns_posts WHERE id = ?", (post_id,))
     conn.commit()
 
