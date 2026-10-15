@@ -2,7 +2,7 @@
 /**
  * Plugin Name: YADOKARI CURATED SNS
  * Description: 公式 SNS（X・Threads @yadokari_mobi）へ、決めた時刻に投稿する。文面は yadokari-curated が作って REST で渡す。
- * Version: 1.2
+ * Version: 1.3
  *
  * 置き場所: wp-content/mu-plugins/yadokari-curated-sns.php（有効化の操作は要らない）
  * 前提: yadokari-curated-x.php（X の投稿関数 yc_x_post と鍵 YC_X_*）が同じ mu-plugins にあること
@@ -208,9 +208,30 @@ function yc_threads_post($text, $link = '') {
     if (empty($body['id'])) {
         return new WP_Error('yc_threads', 'Threads（作成）: ' . (is_wp_error($res) ? $res->get_error_message() : substr(wp_remote_retrieve_body($res), 0, 300)));
     }
-    $res = wp_remote_post($base . '/threads_publish', array('timeout' => 20, 'body' => array(
-        'creation_id' => $body['id'], 'access_token' => $token)));
-    $pub = is_wp_error($res) ? null : json_decode(wp_remote_retrieve_body($res), true);
+    // 1.3: 作った直後に公開すると「メディアが見つかりません」（code 24）になることがあるので、
+    // 準備ができる（status=FINISHED）まで待ってから公開する。最大40秒。公開の失敗は1回だけやり直す
+    for ($i = 0; $i < 10; $i++) {
+        sleep($i === 0 ? 2 : 4);
+        $st = yc_threads_get('/' . $body['id'], array('fields' => 'status,error_message'));
+        $status = is_wp_error($st) ? '' : ($st['status'] ?? '');
+        if ($status === 'FINISHED') {
+            break;
+        }
+        if ($status === 'ERROR' || $status === 'EXPIRED') {
+            return new WP_Error('yc_threads', 'Threads（準備）: ' . $status . ' ' . ($st['error_message'] ?? ''));
+        }
+    }
+    for ($try = 0; $try < 2; $try++) {
+        if ($try) {
+            sleep(10);
+        }
+        $res = wp_remote_post($base . '/threads_publish', array('timeout' => 20, 'body' => array(
+            'creation_id' => $body['id'], 'access_token' => $token)));
+        $pub = is_wp_error($res) ? null : json_decode(wp_remote_retrieve_body($res), true);
+        if (!empty($pub['id'])) {
+            break;
+        }
+    }
     if (empty($pub['id'])) {
         return new WP_Error('yc_threads', 'Threads（公開）: ' . (is_wp_error($res) ? $res->get_error_message() : substr(wp_remote_retrieve_body($res), 0, 300)));
     }
@@ -263,6 +284,10 @@ add_action('yc_sns_fire', function ($id) {
     // 二重投稿の防止（同時に2回呼ばれても1回だけ）
     if (!add_post_meta($id, 'yc_sns_lock', time(), true)) {
         return;
+    }
+    // Threads の準備待ち（最大1分ほど）で止まらないように
+    if (function_exists('set_time_limit')) {
+        @set_time_limit(180);
     }
     $text = get_post_meta($id, 'yc_sns_text', true);
     $url = get_post_meta($id, 'yc_sns_url', true);
