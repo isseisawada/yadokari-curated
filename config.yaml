@@ -202,4 +202,7 @@ sns:
     - {search: "インタビュー"}
     - {search: "対談"}
     - {categories: "2182"}
+    # 2026-10-20 ユーザー指定（B）: 「×さわだいっせい」の対談や「Life is beautiful」もインタビューとして扱う
+    - {search: "さわだいっせい"}
+    - {search: "Life is beautiful"}
 
