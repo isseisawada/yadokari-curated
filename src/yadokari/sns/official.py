@@ -281,7 +281,8 @@ def edits(conn: DbConnection, limit: int = 5) -> list[tuple[str, str]]:
 def skip_reasons(conn: DbConnection, limit: int = 15) -> list[tuple[str, str]]:
     """人が外した記事と理由（新しい順）。過去記事を選ぶときに AI に見せる。"""
     rows = conn.execute(
-        "SELECT title, reason FROM sns_skipped WHERE reason IS NOT NULL AND reason <> '' ORDER BY id DESC LIMIT ?",
+        "SELECT title, reason FROM sns_skipped WHERE reason IS NOT NULL AND reason <> ''"
+        " AND (kind IS NULL OR kind <> 'ai_rejected') ORDER BY id DESC LIMIT ?",
         (limit,)).fetchall()
     return [(r["title"] or "", r["reason"]) for r in rows]
 
@@ -375,9 +376,10 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
             if src is not None:
                 out = write(config, src, client, hint=hint, recent=recent, fixes=fixes)
             else:
-                # 過去記事は、AI が「今読んでも成り立たない」と言ったら別の記事にする（3本まで）
+                # 過去記事は、AI が「今読んでも成り立たない」と言ったら別の記事にする（6本まで）。
+                # 外した記事は覚えておき、次の実行でも選ばない（同じ記事を毎回試して枠が埋まらなかったため）
                 kind = "archive"
-                for _ in range(3):
+                for _ in range(6):
                     src = archive_article(config, wp, used, now, rng=rng, skip=rejected)
                     if src is None:
                         break
@@ -386,6 +388,12 @@ def plan(config: Config, conn: DbConnection, *, wp=None, client=None, now: datet
                         break
                     log.info("過去記事を外しました: wp#%s %s", src.wp_post_id, out["reason"])
                     rejected.add(src.wp_post_id)
+                    used.add(src.wp_post_id)
+                    conn.execute(
+                        "INSERT INTO sns_skipped (wp_post_id, slot_at, kind, title, skipped_at, reason)"
+                        " VALUES (?, ?, 'ai_rejected', ?, ?, ?)",
+                        (src.wp_post_id, slot.isoformat(), src.title, now_iso(), out["reason"][:300]))
+                    conn.commit()
                     out = None
             if src is None or out is None:
                 exhausted = src is None
