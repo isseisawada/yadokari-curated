@@ -408,3 +408,14 @@ def test_retry_missing_compares_since_in_utc(config, db):
     db.commit()
     since = datetime(2026, 10, 14, 0, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
     assert official.retry_missing(db, wp, since) == [pid]
+
+
+def test_ai_rejected_archive_is_remembered_and_not_shown_as_human_reason(config, db):
+    cfg = sns_config(config, until="2099-12-31")
+    cfg.sns.archive_pools = []
+    wp = FakeSnsWP()
+    bad = {"text": "x", "pattern": "number", "usable": False, "reason": "古い"}
+    official.plan(cfg, db, wp=wp, client=FakeLLM(bad, good()), now=NOW, limit=1, rng=random.Random(1))
+    row = db.execute("SELECT kind, reason FROM sns_skipped").fetchone()
+    assert (row["kind"], row["reason"]) == ("ai_rejected", "古い")
+    assert official.skip_reasons(db) == []
