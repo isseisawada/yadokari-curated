@@ -19,8 +19,11 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
+import hmac
 import os
 import secrets
+import time
 from dataclasses import dataclass
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -106,6 +109,32 @@ EXEMPT_PATHS = frozenset({"/healthz"})
 EXEMPT_PREFIXES: tuple[str, ...] = ()
 
 
+# 一度パスワードを通した端末は、しばらく聞き直さない（2026-10-20 ユーザー指定: 毎回入れるのが面倒）。
+# 中身は「期限.署名」だけ。署名の鍵はパスワードから作るので、パスワードを変えると全端末で無効になる。
+REMEMBER_COOKIE = "yc_remember"
+REMEMBER_DAYS = 90
+
+
+def _sign(auth: BasicAuth, expires: int) -> str:
+    key = hashlib.sha256(f"{auth.user}:{auth.password}".encode()).digest()
+    return hmac.new(key, str(expires).encode(), hashlib.sha256).hexdigest()
+
+
+def remember_token(auth: BasicAuth, now: float | None = None) -> str:
+    expires = int((now or time.time()) + REMEMBER_DAYS * 86400)
+    return f"{expires}.{_sign(auth, expires)}"
+
+
+def remembered(auth: BasicAuth, token: str, now: float | None = None) -> bool:
+    expires_s, _, sig = token.partition(".")
+    if not expires_s.isdigit() or not sig:
+        return False
+    expires = int(expires_s)
+    if expires < (now or time.time()):
+        return False
+    return secrets.compare_digest(sig, _sign(auth, expires))
+
+
 class BasicAuthMiddleware(BaseHTTPMiddleware):
     """EXEMPT_PATHS / EXEMPT_PREFIXES 以外の全経路に Basic 認証をかける。
 
@@ -120,6 +149,8 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path in EXEMPT_PATHS or path.startswith(EXEMPT_PREFIXES):
             return await call_next(request)
+        if remembered(self._auth, request.cookies.get(REMEMBER_COOKIE, "")):
+            return await call_next(request)
         header = request.headers.get("authorization", "")
         parsed = _parse_header(header) if header else None
         if parsed is None or not self._auth.matches(*parsed):
@@ -132,7 +163,10 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
                 status_code=401,
                 headers={"WWW-Authenticate": f'Basic realm="{REALM}", charset="UTF-8"'},
             )
-        return await call_next(request)
+        response = await call_next(request)
+        response.set_cookie(REMEMBER_COOKIE, remember_token(self._auth), max_age=REMEMBER_DAYS * 86400,
+                            httponly=True, secure=request.url.scheme == "https", samesite="lax")
+        return response
 
 
 __all__ = [

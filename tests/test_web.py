@@ -123,3 +123,23 @@ def test_select_all_is_hidden_when_nothing_to_review(env):
     assert 'id="bulk-all"' not in c.get("/articles").text
     add_article(conn, url="https://t.com/x", score=80)
     assert 'id="bulk-all"' in c.get("/articles").text
+
+
+def test_password_is_remembered_by_cookie(config):
+    """一度通した端末はクッキーで覚える。パスワードを変えたら無効（認証を通れば 404、通らなければ 401）。"""
+    from yadokari.web.auth import REMEMBER_COOKIE, remember_token, remembered
+
+    app = create_app(config, auth=BasicAuth("u", "p"))
+    c = TestClient(app)
+    r = c.get("/healthz")
+    assert c.get("/no-such-page", auth=("u", "p")).status_code == 404
+    assert REMEMBER_COOKIE in c.cookies
+    assert c.get("/no-such-page").status_code == 404  # 2回目はパスワードなし
+    fresh = TestClient(app)
+    assert fresh.get("/no-such-page").status_code == 401
+    fresh.cookies.set(REMEMBER_COOKIE, "9999999999.deadbeef")
+    assert fresh.get("/no-such-page").status_code == 401  # 偽の署名は通さない
+    token = remember_token(BasicAuth("u", "p"))
+    assert not remembered(BasicAuth("u", "new"), token)  # パスワードを変えたら無効
+    assert not remembered(BasicAuth("u", "p"), token, now=10**11)  # 期限切れ
+    assert r.status_code == 200
