@@ -21,7 +21,8 @@ class FakeSnsWP:
 
     def __init__(self):
         self.archive = [{"id": 500 + i, "link": f"https://yadokari.net/magazine/{500 + i}/",
-                         "title": {"rendered": f"過去記事{i}"}, "content": {"rendered": BODY}}
+                         "title": {"rendered": f"過去記事{i}"}, "content": {"rendered": BODY},
+                         "featured_media": 600 + i}
                         for i in range(10)]
         self.queue: dict[int, dict] = {}
 
@@ -226,11 +227,11 @@ def test_archive_prefers_interviews_and_skips_excluded_and_unusable(config, db):
             if params.get("search") == "インタビュー":
                 posts = [
                     {"id": 1, "link": "l1", "title": {"rendered": "晴耕雨読の家・那須・430万円"},
-                     "content": {"rendered": BODY}},
+                     "content": {"rendered": BODY}, "featured_media": 9},
                     {"id": 2, "link": "l2", "title": {"rendered": "【インタビュー】終わった募集の話"},
-                     "content": {"rendered": BODY}},
+                     "content": {"rendered": BODY}, "featured_media": 9},
                     {"id": 3, "link": "l3", "title": {"rendered": "【インタビュー】小さな家に暮らす人"},
-                     "content": {"rendered": BODY}},
+                     "content": {"rendered": BODY}, "featured_media": 9},
                 ]
                 return (posts[:1], 3) if params.get("per_page") == 1 else (posts, 1)
             return super().list_posts(params)
@@ -285,6 +286,16 @@ def test_card_image_is_kept_for_the_review_page(config, db):
         p["featured_media"] = 7
     official.plan(cfg, db, wp=wp, client=FakeLLM(good()), now=NOW, limit=1)
     assert db.execute("SELECT image FROM sns_posts").fetchone()["image"].endswith("/7.jpg")
+
+
+def test_archive_without_featured_image_is_not_picked(config, db):
+    cfg = sns_config(config, until=None)
+    wp = FakeSnsWP()
+    for p in wp.archive[1:]:
+        p["featured_media"] = 0
+    official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(3)]), now=NOW, limit=3)
+    ids = [r["wp_post_id"] for r in db.execute("SELECT wp_post_id FROM sns_posts WHERE kind = 'archive'")]
+    assert ids and set(ids) == {500}
 
 
 def test_skipped_slot_is_refilled_with_another_article(config, db):

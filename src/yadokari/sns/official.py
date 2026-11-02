@@ -235,12 +235,13 @@ def archive_article(config: Config, wp, used: set[int], now: datetime,
                 text = plain_text(p.get("content", {}).get("rendered", ""))
                 if len(text) < 400:
                     continue
-                image = None
-                if p.get("featured_media"):
-                    try:
-                        image = wp.media_url(int(p["featured_media"]))
-                    except Exception:  # noqa: BLE001 - 画像は審査画面で見せるだけ
-                        image = None
+                # アイキャッチが無い記事は X / Threads のカードがサイト共通の画像になるので選ばない（2026-11-02 ユーザー指摘）
+                if not p.get("featured_media"):
+                    continue
+                try:
+                    image = wp.media_url(int(p["featured_media"]))
+                except Exception:  # noqa: BLE001
+                    continue
                 return Source(wp_post_id=pid, link=p.get("link") or magazine_link(config, pid),
                               title=title, text=text, image=image)
     return None
