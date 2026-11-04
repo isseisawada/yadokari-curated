@@ -83,6 +83,11 @@ class WordPressClient:
         """kind は categories か tags。"""
         return self._check(self._http.get(f"{self.api}/{kind}/{term_id}"))
 
+    def schedule_check(self) -> dict:
+        """予約投稿の予定表の状態（mu-plugin yadokari-missed-schedule.php の確認口）。"""
+        url = self.config.base_url.rstrip("/") + "/wp-json/yc/v1/schedule-check"
+        return self._check(self._http.get(url))
+
     # --- 投稿 ---------------------------------------------------------
     def find_by_slug(self, slug: str) -> WPPost | None:
         """**二重投稿の防止。** 同じ slug の投稿がどの状態でもあれば返す。

@@ -191,10 +191,32 @@ def _wp_check(cfg) -> int:
                 got = wp.get_term("tags", tid).get("name")
                 ok &= got == name
                 print(f"  タグ {tid}: {got}{'' if got == name else f'（{name} のはず）'}")
+            _print_schedule_check(wp)
     except WordPressError as exc:
         print(f"つながりません: {exc}")
         return 1
     return 0 if ok else 1
+
+
+def _print_schedule_check(wp) -> None:
+    """予約投稿の予定表を見る（2026-11-05: 朝8時の予約が3日続けて公開されなかった原因調べ）。"""
+    from yadokari.wordpress.client import WordPressError
+
+    try:
+        c = wp.schedule_check()
+    except WordPressError as exc:
+        print(f"予約の予定表: 見られません（{exc}）")
+        return
+    print(f"予約の予定表: 今 {c['now']} UTC / DISABLE_WP_CRON={c['disable_wp_cron']}"
+          f" ALTERNATE_WP_CRON={c['alternate_wp_cron']} 外部オブジェクトキャッシュ={c['ext_object_cache']}"
+          f" 実行中ロック={c['doing_cron']}")
+    print(f"  予定の総数 {c['cron_events']} / うち公開の予定 {c['publish_future_events']}"
+          f" / 予約済みの投稿 {c['future_posts']} / 公開の予定が無い予約 {c['future_without_event']}")
+    for f in [f for f in c["future"] if not f["event"]][:20]:
+        print(f"  予定なし: post {f['id']} 予定 {f['due']} UTC{' (システムの記事)' if f['yc'] else ''}")
+    for r in c["rescued"][-20:]:
+        print(f"  拾って公開: post {r['id']} 予定 {r['due']} → {r['at']} 予定表に{'あった ' + r['had_event'] if r['had_event'] else '無かった'}"
+              f" 結果 {r['status']}")
 
 
 def _cmd_wp(cfg, args) -> int:
