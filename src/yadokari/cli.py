@@ -233,6 +233,8 @@ def _cmd_wp(cfg, args) -> int:
     print(f"確認 {res.checked} 件 / 公開 {len(res.published)} 件")
     for draft_id, link in res.published:
         print(f"  公開: draft {draft_id} {link or ''}")
+    for draft_id, when in res.rescued:
+        print(f"  取りこぼしを公開: draft {draft_id}（予定 {when}）")
     for draft_id, when in res.missed:
         print(f"  要確認: draft {draft_id} は予定 {when} を過ぎても公開されていません（予約投稿の失敗）")
     for draft_id, err in res.errors:
@@ -289,12 +291,13 @@ def _cmd_sns(cfg, args) -> int:
             print(f"Threads: つながりました（フォロワー {data['followers']}）")
             return 0
         if args.action == "retry":
-            # 今日（JST）の枠で、出せなかった方だけ出し直す
+            # 昨日・今日（JST）の枠で、出せなかったもの・出せなかった方だけ出し直す
             from datetime import datetime as _dt
+            from datetime import timedelta as _td
             from zoneinfo import ZoneInfo
 
             tz = ZoneInfo(cfg.app.timezone)
-            since = _dt.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+            since = _dt.now(tz).replace(hour=0, minute=0, second=0, microsecond=0) - _td(days=1)
             ids = official.retry_missing(conn, wp, since)
             print(f"出し直し {len(ids)} 本: {ids}")
             return 0

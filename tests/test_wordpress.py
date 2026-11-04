@@ -132,7 +132,7 @@ def test_resend_keeps_schedule(config, db):
     assert next(iter(wp.posts.values()))["status"] == "future"
 
 
-def test_sync_marks_published_and_reports_missed_schedules(config, db):
+def test_sync_marks_published_and_publishes_missed_schedules(config, db):
     config.wordpress.allow_schedule = True
     wp = FakeWP()
     now = datetime.now(UTC)
@@ -149,10 +149,12 @@ def test_sync_marks_published_and_reports_missed_schedules(config, db):
     wp.posts[ra.post_id]["status"] = "publish"
     later = now + timedelta(hours=3)
     res = sync(config, db, wp=wp.client(config), now=later)
-    assert [x[0] for x in res.published] == [a]
-    assert [x[0] for x in res.missed] == [b]
+    # 予定を過ぎた b（wp-cron の取りこぼし）は、その場で公開する
+    assert sorted(x[0] for x in res.published) == sorted([a, b])
+    assert [x[0] for x in res.rescued] == [b] and res.missed == []
     assert get_draft(db, a)["state"] == "published"
-    assert get_draft(db, b)["wp_status"] == "future"
+    assert get_draft(db, b)["state"] == "published"
+    assert wp.posts[rb.post_id]["status"] == "publish"
     assert rb.post_id != ra.post_id
 
 

@@ -262,6 +262,7 @@ def push(config: Config, conn: DbConnection, draft_id: int, *, schedule: bool = 
 class SyncResult:
     published: list[tuple[int, str | None]] = field(default_factory=list)
     missed: list[tuple[int, str]] = field(default_factory=list)
+    rescued: list[tuple[int, str]] = field(default_factory=list)  # 取りこぼしをこちらで公開したもの
     errors: list[tuple[int, str]] = field(default_factory=list)  # (draft_id, エラー)
     checked: int = 0
 
@@ -272,8 +273,8 @@ def sync(config: Config, conn: DbConnection, wp: WordPressClient | None = None,
     """WP に送ったものの状態を取り直す。公開されていたら published にする
     （SNS はここで公開を確かめてから出す）。
 
-    予定時刻を grace_minutes 過ぎても future のままなら「予約投稿の失敗」として返す
-    （wp-cron の取りこぼし）。
+    予定時刻を grace_minutes 過ぎても future のままなら（wp-cron の取りこぼし）その場で公開する。
+    公開できなかったものだけ「予約投稿の失敗」として返す。
     """
     now = now or datetime.now(UTC)
     result = SyncResult()
@@ -303,7 +304,17 @@ def sync(config: Config, conn: DbConnection, wp: WordPressClient | None = None,
             elif post.status == "future" and d["scheduled_at"]:
                 due = datetime.fromisoformat(d["scheduled_at"])
                 if now > due + timedelta(minutes=grace_minutes):
-                    result.missed.append((d["id"], d["scheduled_at"]))
+                    # 2026-11-04 ユーザー指定: 取りこぼしは知らせるだけでなく、その場で公開する
+                    try:
+                        post = wp.update_post(d["wp_post_id"], {"status": "publish"})
+                    except (httpx.HTTPError, WordPressError) as exc:
+                        log.warning("取りこぼしを公開できませんでした: draft=%s (%s)", d["id"], exc)
+                    if post.status == "publish":
+                        mark_published(conn, d["id"], post.link, now.isoformat())
+                        result.published.append((d["id"], post.link))
+                        result.rescued.append((d["id"], d["scheduled_at"]))
+                    else:
+                        result.missed.append((d["id"], d["scheduled_at"]))
             conn.execute("UPDATE drafts SET wp_status = ? WHERE id = ?", (post.status, d["id"]))
             conn.commit()
     finally:
