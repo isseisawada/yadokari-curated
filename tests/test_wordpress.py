@@ -214,6 +214,15 @@ def test_wp_check_reads_only(config, capsys, monkeypatch):
                 "edit_posts": True, "publish_posts": True, "upload_files": True}})
         if "/categories/" in path:
             return httpx.Response(200, json={"name": "タイニーハウス、最前線"})
+        if path.endswith("/yc/v1/schedule-check"):
+            return httpx.Response(200, json={
+                "now": "2026-11-05 00:00:00", "disable_wp_cron": False, "alternate_wp_cron": False,
+                "ext_object_cache": True, "doing_cron": False, "cron_events": 10, "publish_future_events": 1,
+                "future_posts": 2, "future_without_event": 1,
+                "future": [{"id": 1, "yc": True, "due": "2026-11-05 23:00:00", "event": False},
+                           {"id": 2, "yc": True, "due": "2026-11-06 07:00:00", "event": "2026-11-06 07:00:00"}],
+                "rescued": [{"id": 3, "due": "2026-11-04 23:00:00", "at": "2026-11-04 23:40:00",
+                             "had_event": False, "status": "publish"}]})
         tid = int(path.rsplit("/", 1)[-1])
         names = {v: k for k, v in config.seo.tag_ids.items()}
         return httpx.Response(200, json={"name": names[tid]})
@@ -230,6 +239,7 @@ def test_wp_check_reads_only(config, capsys, monkeypatch):
     assert set(methods) == {"GET"}
     out = capsys.readouterr().out
     assert "予約・公開する: OK" in out
+    assert "公開の予定が無い予約 1" in out and "予定なし: post 1" in out and "予定表に無かった" in out
     assert "英数字24文字" in out and "abcd" not in out  # 値は出さない
 
 
