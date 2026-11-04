@@ -537,7 +537,9 @@ def retry_missing(conn: DbConnection, wp, since: datetime, gap_min: int = 3) -> 
     """出せなかった方だけ出し直す（例: Threads のトークンを入れる前に X だけに出たもの）。
     since 以降の枠で、片方の ID が無いものを gap_min 分おきに WP に頼む。2026-10-14 ユーザー指定（今日の分を Threads にも）。"""
     rows = conn.execute(
-        "SELECT id FROM sns_posts WHERE state = 'posted' AND slot_at >= ? AND (threads_id IS NULL OR x_id IS NULL)"
+        # failed も拾う（2026-11-04: 記事の予約公開が止まって出せなかった新着を、公開後に出し直す）
+        "SELECT id FROM sns_posts WHERE state IN ('posted', 'failed') AND slot_at >= ?"
+        " AND (threads_id IS NULL OR x_id IS NULL)"
         " ORDER BY slot_at", (since.astimezone(UTC).isoformat(),)).fetchall()  # slot_at は UTC の文字列
     now = datetime.now(UTC)
     done = []
