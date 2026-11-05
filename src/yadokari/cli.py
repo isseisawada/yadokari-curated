@@ -214,6 +214,10 @@ def _print_schedule_check(wp) -> None:
           f" / 予約済みの投稿 {c['future_posts']} / 公開の予定が無い予約 {c['future_without_event']}")
     for f in [f for f in c["future"] if not f["event"]][:20]:
         print(f"  予定なし: post {f['id']} 予定 {f['due']} UTC{' (システムの記事)' if f['yc'] else ''}")
+    off = [f for f in c["future"] if f["event"] and f["event"] != f["due"]]
+    print(f"  公開の予定の時刻が予約時刻とずれている予約 {len(off)}")
+    for f in off[:20]:
+        print(f"  ずれ: post {f['id']} 予約 {f['due']} UTC / 公開の予定 {f['event']} UTC")
     for r in c["rescued"][-20:]:
         print(f"  拾って公開: post {r['id']} 予定 {r['due']} → {r['at']} 予定表に{'あった ' + r['had_event'] if r['had_event'] else '無かった'}"
               f" 結果 {r['status']}")
