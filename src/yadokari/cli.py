@@ -218,6 +218,10 @@ def _print_schedule_check(wp) -> None:
     print(f"  公開の予定の時刻が予約時刻とずれている予約 {len(off)}")
     for f in off[:20]:
         print(f"  ずれ: post {f['id']} 予約 {f['due']} UTC / 公開の予定 {f['event']} UTC")
+    for t in c.get("trace", [])[-20:]:
+        print(f"  公開の処理: post {t['id']} 予定 {t['due']} → {t['at']} 状態 {t['before']}→{t.get('after')}"
+              f" {'最後まで動いた' if t.get('finished') else '途中で止まった'} {t.get('elapsed')}秒"
+              f" (cron={t.get('cron')} 上限{t.get('max_time')}秒){' エラー: ' + t['error'] if t.get('error') else ''}")
     for r in c["rescued"][-20:]:
         print(f"  拾って公開: post {r['id']} 予定 {r['due']} → {r['at']} 予定表に{'あった ' + r['had_event'] if r['had_event'] else '無かった'}"
               f" 結果 {r['status']}")
