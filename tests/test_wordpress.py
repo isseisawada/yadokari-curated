@@ -222,7 +222,10 @@ def test_wp_check_reads_only(config, capsys, monkeypatch):
                 "future": [{"id": 1, "yc": True, "due": "2026-11-05 23:00:00", "event": False},
                            {"id": 2, "yc": True, "due": "2026-11-06 07:00:00", "event": "2026-11-06 07:00:00"}],
                 "rescued": [{"id": 3, "due": "2026-11-04 23:00:00", "at": "2026-11-04 23:40:00",
-                             "had_event": False, "status": "publish"}]})
+                             "had_event": False, "status": "publish"}],
+                "trace": [{"id": 3, "due": "2026-11-04 23:00:00", "at": "2026-11-04 23:00:05", "before": "future",
+                           "after": "future", "finished": False, "elapsed": "30.10", "cron": True,
+                           "max_time": "30", "error": "Maximum execution time of 30 seconds exceeded @ x.php:1"}]})
         tid = int(path.rsplit("/", 1)[-1])
         names = {v: k for k, v in config.seo.tag_ids.items()}
         return httpx.Response(200, json={"name": names[tid]})
@@ -240,6 +243,7 @@ def test_wp_check_reads_only(config, capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "予約・公開する: OK" in out
     assert "公開の予定が無い予約 1" in out and "予定なし: post 1" in out and "予定表に無かった" in out
+    assert "途中で止まった" in out and "Maximum execution time" in out
     assert "英数字24文字" in out and "abcd" not in out  # 値は出さない
 
 
