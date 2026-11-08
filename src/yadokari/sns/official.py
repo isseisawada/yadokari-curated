@@ -235,12 +235,13 @@ def archive_article(config: Config, wp, used: set[int], now: datetime,
                 text = plain_text(p.get("content", {}).get("rendered", ""))
                 if len(text) < 400:
                     continue
-                image = None
-                if p.get("featured_media"):
-                    try:
-                        image = wp.media_url(int(p["featured_media"]))
-                    except Exception:  # noqa: BLE001 - 画像は審査画面で見せるだけ
-                        image = None
+                # アイキャッチが無い記事は X / Threads のカードがサイト共通の画像になるので選ばない（2026-11-02 ユーザー指摘）
+                if not p.get("featured_media"):
+                    continue
+                try:
+                    image = wp.media_url(int(p["featured_media"]))
+                except Exception:  # noqa: BLE001
+                    continue
                 return Source(wp_post_id=pid, link=p.get("link") or magazine_link(config, pid),
                               title=title, text=text, image=image)
     return None
@@ -536,7 +537,9 @@ def retry_missing(conn: DbConnection, wp, since: datetime, gap_min: int = 3) -> 
     """出せなかった方だけ出し直す（例: Threads のトークンを入れる前に X だけに出たもの）。
     since 以降の枠で、片方の ID が無いものを gap_min 分おきに WP に頼む。2026-10-14 ユーザー指定（今日の分を Threads にも）。"""
     rows = conn.execute(
-        "SELECT id FROM sns_posts WHERE state = 'posted' AND slot_at >= ? AND (threads_id IS NULL OR x_id IS NULL)"
+        # failed も拾う（2026-11-04: 記事の予約公開が止まって出せなかった新着を、公開後に出し直す）
+        "SELECT id FROM sns_posts WHERE state IN ('posted', 'failed') AND slot_at >= ?"
+        " AND (threads_id IS NULL OR x_id IS NULL)"
         " ORDER BY slot_at", (since.astimezone(UTC).isoformat(),)).fetchall()  # slot_at は UTC の文字列
     now = datetime.now(UTC)
     done = []

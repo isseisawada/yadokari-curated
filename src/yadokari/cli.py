@@ -191,10 +191,40 @@ def _wp_check(cfg) -> int:
                 got = wp.get_term("tags", tid).get("name")
                 ok &= got == name
                 print(f"  タグ {tid}: {got}{'' if got == name else f'（{name} のはず）'}")
+            _print_schedule_check(wp)
     except WordPressError as exc:
         print(f"つながりません: {exc}")
         return 1
     return 0 if ok else 1
+
+
+def _print_schedule_check(wp) -> None:
+    """予約投稿の予定表を見る（2026-11-05: 朝8時の予約が3日続けて公開されなかった原因調べ）。"""
+    from yadokari.wordpress.client import WordPressError
+
+    try:
+        c = wp.schedule_check()
+    except WordPressError as exc:
+        print(f"予約の予定表: 見られません（{exc}）")
+        return
+    print(f"予約の予定表: 今 {c['now']} UTC / DISABLE_WP_CRON={c['disable_wp_cron']}"
+          f" ALTERNATE_WP_CRON={c['alternate_wp_cron']} 外部オブジェクトキャッシュ={c['ext_object_cache']}"
+          f" 実行中ロック={c['doing_cron']}")
+    print(f"  予定の総数 {c['cron_events']} / うち公開の予定 {c['publish_future_events']}"
+          f" / 予約済みの投稿 {c['future_posts']} / 公開の予定が無い予約 {c['future_without_event']}")
+    for f in [f for f in c["future"] if not f["event"]][:20]:
+        print(f"  予定なし: post {f['id']} 予定 {f['due']} UTC{' (システムの記事)' if f['yc'] else ''}")
+    off = [f for f in c["future"] if f["event"] and f["event"] != f["due"]]
+    print(f"  公開の予定の時刻が予約時刻とずれている予約 {len(off)}")
+    for f in off[:20]:
+        print(f"  ずれ: post {f['id']} 予約 {f['due']} UTC / 公開の予定 {f['event']} UTC")
+    for t in c.get("trace", [])[-20:]:
+        print(f"  公開の処理: post {t['id']} 予定 {t['due']} → {t['at']} 状態 {t['before']}→{t.get('after')}"
+              f" {'最後まで動いた' if t.get('finished') else '途中で止まった'} {t.get('elapsed')}秒"
+              f" (cron={t.get('cron')} 上限{t.get('max_time')}秒){' エラー: ' + t['error'] if t.get('error') else ''}")
+    for r in c["rescued"][-20:]:
+        print(f"  拾って公開: post {r['id']} 予定 {r['due']} → {r['at']} 予定表に{'あった ' + r['had_event'] if r['had_event'] else '無かった'}"
+              f" 結果 {r['status']}")
 
 
 def _cmd_wp(cfg, args) -> int:
@@ -233,6 +263,8 @@ def _cmd_wp(cfg, args) -> int:
     print(f"確認 {res.checked} 件 / 公開 {len(res.published)} 件")
     for draft_id, link in res.published:
         print(f"  公開: draft {draft_id} {link or ''}")
+    for draft_id, when in res.rescued:
+        print(f"  取りこぼしを公開: draft {draft_id}（予定 {when}）")
     for draft_id, when in res.missed:
         print(f"  要確認: draft {draft_id} は予定 {when} を過ぎても公開されていません（予約投稿の失敗）")
     for draft_id, err in res.errors:
@@ -289,12 +321,13 @@ def _cmd_sns(cfg, args) -> int:
             print(f"Threads: つながりました（フォロワー {data['followers']}）")
             return 0
         if args.action == "retry":
-            # 今日（JST）の枠で、出せなかった方だけ出し直す
+            # 昨日・今日（JST）の枠で、出せなかったもの・出せなかった方だけ出し直す
             from datetime import datetime as _dt
+            from datetime import timedelta as _td
             from zoneinfo import ZoneInfo
 
             tz = ZoneInfo(cfg.app.timezone)
-            since = _dt.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+            since = _dt.now(tz).replace(hour=0, minute=0, second=0, microsecond=0) - _td(days=1)
             ids = official.retry_missing(conn, wp, since)
             print(f"出し直し {len(ids)} 本: {ids}")
             return 0

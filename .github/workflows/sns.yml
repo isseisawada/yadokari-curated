@@ -36,4 +36,9 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[postgres]"
       - run: python -m yadokari.cli db migrate
+      # 記事の予約公開の取りこぼし（wp-cron）を毎時拾って公開する。新着の SNS は記事の公開を待つので、先に済ませる
+      - name: 予約公開の取りこぼしを公開
+        if: ${{ (inputs.action || 'run') == 'run' }}
+        continue-on-error: true
+        run: python -m yadokari.cli wp sync
       - run: python -m yadokari.cli sns "${{ inputs.action || 'run' }}"

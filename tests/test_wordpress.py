@@ -132,7 +132,7 @@ def test_resend_keeps_schedule(config, db):
     assert next(iter(wp.posts.values()))["status"] == "future"
 
 
-def test_sync_marks_published_and_reports_missed_schedules(config, db):
+def test_sync_marks_published_and_publishes_missed_schedules(config, db):
     config.wordpress.allow_schedule = True
     wp = FakeWP()
     now = datetime.now(UTC)
@@ -149,10 +149,12 @@ def test_sync_marks_published_and_reports_missed_schedules(config, db):
     wp.posts[ra.post_id]["status"] = "publish"
     later = now + timedelta(hours=3)
     res = sync(config, db, wp=wp.client(config), now=later)
-    assert [x[0] for x in res.published] == [a]
-    assert [x[0] for x in res.missed] == [b]
+    # 予定を過ぎた b（wp-cron の取りこぼし）は、その場で公開する
+    assert sorted(x[0] for x in res.published) == sorted([a, b])
+    assert [x[0] for x in res.rescued] == [b] and res.missed == []
     assert get_draft(db, a)["state"] == "published"
-    assert get_draft(db, b)["wp_status"] == "future"
+    assert get_draft(db, b)["state"] == "published"
+    assert wp.posts[rb.post_id]["status"] == "publish"
     assert rb.post_id != ra.post_id
 
 
@@ -212,6 +214,18 @@ def test_wp_check_reads_only(config, capsys, monkeypatch):
                 "edit_posts": True, "publish_posts": True, "upload_files": True}})
         if "/categories/" in path:
             return httpx.Response(200, json={"name": "タイニーハウス、最前線"})
+        if path.endswith("/yc/v1/schedule-check"):
+            return httpx.Response(200, json={
+                "now": "2026-11-05 00:00:00", "disable_wp_cron": False, "alternate_wp_cron": False,
+                "ext_object_cache": True, "doing_cron": False, "cron_events": 10, "publish_future_events": 1,
+                "future_posts": 2, "future_without_event": 1,
+                "future": [{"id": 1, "yc": True, "due": "2026-11-05 23:00:00", "event": False},
+                           {"id": 2, "yc": True, "due": "2026-11-06 07:00:00", "event": "2026-11-06 07:00:00"}],
+                "rescued": [{"id": 3, "due": "2026-11-04 23:00:00", "at": "2026-11-04 23:40:00",
+                             "had_event": False, "status": "publish"}],
+                "trace": [{"id": 3, "due": "2026-11-04 23:00:00", "at": "2026-11-04 23:00:05", "before": "future",
+                           "after": "future", "finished": False, "elapsed": "30.10", "cron": True,
+                           "max_time": "30", "error": "Maximum execution time of 30 seconds exceeded @ x.php:1"}]})
         tid = int(path.rsplit("/", 1)[-1])
         names = {v: k for k, v in config.seo.tag_ids.items()}
         return httpx.Response(200, json={"name": names[tid]})
@@ -228,6 +242,8 @@ def test_wp_check_reads_only(config, capsys, monkeypatch):
     assert set(methods) == {"GET"}
     out = capsys.readouterr().out
     assert "予約・公開する: OK" in out
+    assert "公開の予定が無い予約 1" in out and "予定なし: post 1" in out and "予定表に無かった" in out
+    assert "途中で止まった" in out and "Maximum execution time" in out
     assert "英数字24文字" in out and "abcd" not in out  # 値は出さない
 
 
