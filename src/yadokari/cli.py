@@ -354,6 +354,10 @@ def _cmd_sns(cfg, args) -> int:
             failed |= bool(errors)
         if args.action in ("run", "sync"):
             print(f"結果を読んだ {official.sync(conn, wp)} 本")
+            stuck, errs = official.retry_stuck(conn, wp)
+            if stuck or errs:
+                print(f"止まっていた投稿を出し直し {stuck}" + (f" / 失敗 {errs}" if errs else ""))
+            failed |= bool(errs)
         if args.action == "run" and official.measure_due(conn):
             args.action = "measure"  # 週1回（前回から7日）
         if args.action == "measure":
