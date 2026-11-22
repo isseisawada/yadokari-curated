@@ -27,6 +27,7 @@ from yadokari.db.connection import DbConnection
 from yadokari.drafting.numbers import unsupported_numbers
 from yadokari.logging_setup import get_logger
 from yadokari.sns.x import LIMIT, URL_WEIGHT, weight
+from yadokari.wordpress.client import WordPressError
 
 log = get_logger(__name__)
 
@@ -549,6 +550,28 @@ def retry_missing(conn: DbConnection, wp, since: datetime, gap_min: int = 3) -> 
         conn.commit()
         done.append(r["id"])
     return done
+
+
+def retry_stuck(conn: DbConnection, wp, now: datetime | None = None, after_hours: float = 3,
+                days: int = 14, gap_min: int = 30) -> tuple[list[int], list[str]]:
+    """枠を after_hours 過ぎても WP で「投稿待ち」のままのものを出し直す。
+    2026-11-22: 11/15 の新着2本が、WP の中で投稿の処理が動かず1週間止まっていた。
+    新着は記事の公開を最大2時間待つので、それより長く待ってから拾う。古すぎる枠（days より前）は拾わない。"""
+    now = now or datetime.now(UTC)
+    rows = conn.execute(
+        "SELECT id FROM sns_posts WHERE state = 'queued' AND slot_at < ? AND slot_at > ? ORDER BY slot_at",
+        ((now - timedelta(hours=after_hours)).astimezone(UTC).isoformat(),
+         (now - timedelta(days=days)).astimezone(UTC).isoformat())).fetchall()
+    done, errors = [], []
+    for r in rows:
+        try:
+            wp.sns_upsert({"key": r["id"], "retry": True,
+                           "at": (now + timedelta(minutes=gap_min * len(done))).isoformat()})
+        except WordPressError as e:  # 1本の失敗で残りを止めない
+            errors.append(f"{r['id']}: {e}")
+            continue
+        done.append(r["id"])
+    return done, errors
 
 
 def sync(conn: DbConnection, wp) -> int:

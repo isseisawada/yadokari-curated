@@ -444,3 +444,19 @@ def test_ai_rejected_archive_is_remembered_and_not_shown_as_human_reason(config,
     row = db.execute("SELECT kind, reason FROM sns_skipped").fetchone()
     assert (row["kind"], row["reason"]) == ("ai_rejected", "古い")
     assert official.skip_reasons(db) == []
+
+
+def test_retry_stuck_requeues_only_long_stuck_recent_posts(config, db):
+    """枠を3時間過ぎても投稿待ちのもの（14日以内）だけ出し直す。2026-11-22"""
+    cfg = sns_config(config, until="2026-10-01")
+    wp = FakeSnsWP()
+    official.plan(cfg, db, wp=wp, client=FakeLLM(*[good() for _ in range(3)]), now=NOW, limit=3)
+    ids = [r["id"] for r in db.execute("SELECT id FROM sns_posts ORDER BY slot_at").fetchall()]
+    slots = {ids[0]: NOW - timedelta(days=7), ids[1]: NOW - timedelta(hours=1), ids[2]: NOW - timedelta(days=20)}
+    for pid, slot in slots.items():
+        db.execute("UPDATE sns_posts SET state = 'queued', slot_at = ? WHERE id = ?", (slot.isoformat(), pid))
+    db.commit()
+    wp.queue.clear()
+    done, errors = official.retry_stuck(db, wp, now=NOW)
+    assert done == [ids[0]] and not errors
+    assert wp.queue[ids[0]]["retry"] is True
